@@ -1,28 +1,28 @@
 "use client";
 /* ─── Locus · filters: Filter button (field → values), active filter bar, save as view ─── */
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   BookmarkPlus, CalendarDays, ChevronLeft, CircleDashed, CircleSlash, Hexagon, ListFilter, RefreshCw, SignalHigh, Tag,
   Triangle, UserRound, UserRoundPen, Users, X,
 } from "lucide-react";
-import { useSync, uuid } from "@/lib/sync/store";
+import { useSync, uuid, type SyncState } from "@/lib/sync/store";
 import { ui, useUI } from "@/lib/ui";
 import {
   ESTIMATES, PRIORITY_LABEL, STATE_TYPES, STATE_TYPE_COLOR, STATE_TYPE_LABEL, cycleName, cyclePhase, displayName, sortStates,
   todayISO, useLabels, useMeId, useMembers, useProjects, useTeams, type IssueQuery,
 } from "@/lib/model";
 import { createView } from "@/lib/sync/actions";
-import { navigate } from "@/lib/router";
+import { navigate, type TeamTab } from "@/lib/router";
 import { formatDate } from "@/lib/format";
-import { Popover, anyOverlayOpen } from "@/components/primitives/overlay";
+import { Popover } from "@/components/primitives/overlay";
 import { SelectMenu, type MenuItem } from "@/components/primitives/SelectMenu";
 import { Button, Input } from "@/components/primitives/controls";
 import { Avatar } from "@/components/primitives/Avatar";
 import { LabelDot, PriorityIcon, ProjectIcon, StateIcon, TeamIcon } from "@/components/primitives/icons";
 import { StateGlyph } from "@/components/pickers";
-import { ToolbarButton, isTypingTarget, usePopoverFix } from "./shared";
-import type { Filter, FilterField, Priority } from "@/lib/types";
+import { ToolbarButton, isTypingTarget, overlayActive } from "./shared";
+import type { Filter, FilterField, Priority, StateType } from "@/lib/types";
 
 /* ═══ field metadata ═══ */
 
@@ -40,16 +40,66 @@ const FIELD_META: Record<FilterField, { label: string; plural: string; icon: Rea
   due: { label: "Due date", plural: "due dates", icon: <CalendarDays size={14} /> },
 };
 
-/** the single team a view key belongs to: "team:<id>:<tab>", "cycle:<id>", "view:<id>" (team views) */
-function useViewTeamId(viewKey: string): string | undefined {
-  return useSync((s) => {
-    const [kind, id] = viewKey.split(":");
-    if (!id) return undefined;
-    if (kind === "team") return id;
-    if (kind === "cycle") return s.cycles[id]?.team_id;
-    if (kind === "view") return s.views[id]?.team_id ?? undefined;
-    return undefined;
-  });
+/* ═══ view scopes (what "Save view" bakes into the saved view) ═══ */
+
+/**
+ * The status scope of a team's issue tabs. TeamIssuesView passes these as base filters (so the
+ * board drops columns that can never fill) and scopeFilters() reproduces them in saved views.
+ */
+export const TEAM_TAB_FILTERS: Record<TeamTab, Filter[]> = {
+  all: [],
+  active: [{ id: "tab-active", field: "state_type", op: "is", values: ["unstarted", "started"] satisfies StateType[] }],
+  backlog: [{ id: "tab-backlog", field: "state_type", op: "is", values: ["backlog"] satisfies StateType[] }],
+};
+
+export interface ViewScope {
+  /** filters that reproduce the view's scope inside a saved view */
+  filters: Filter[];
+  /** the saved view's team (views scoped to a team only ever show that team's issues) */
+  teamId: string | null;
+}
+
+/**
+ * A view key's scope expressed as saved-view filters + team, or null when it can't be
+ * (Subscribed, the New view draft, saved views themselves, unknown keys) — saving would
+ * silently broaden the view, so "Save view" isn't offered there.
+ *   team:<id>:<tab> → team <id> (+ the tab's status types) · my:assigned → assignee is me
+ *   my:created → creator is me · cycle:<id> → cycle is <id> (+ the cycle's team) · project:<id> → project is <id>
+ */
+export function scopeFilters(viewKey: string, s: Pick<SyncState, "cycles"> = useSync.getState()): ViewScope | null {
+  const [kind, id, tab] = viewKey.split(":");
+  if (!id) return null;
+  const is = (field: FilterField, value: string): Filter => ({ id: `scope-${field}`, field, op: "is", values: [value] });
+  switch (kind) {
+    case "team":
+      return tab === "all" || tab === "active" || tab === "backlog" ? { filters: TEAM_TAB_FILTERS[tab], teamId: id } : null;
+    case "my":
+      if (id === "assigned") return { filters: [is("assignee", "me")], teamId: null };
+      if (id === "created") return { filters: [is("creator", "me")], teamId: null };
+      return null;
+    case "cycle": {
+      const cycle = s.cycles[id];
+      return cycle ? { filters: [is("cycle", id)], teamId: cycle.team_id } : null;
+    }
+    case "project":
+      return { filters: [is("project", id)], teamId: null };
+    default:
+      return null;
+  }
+}
+
+/** scope + view filters without repeats (a team tab's base filter is also its scope) */
+function mergeFilters(lists: Filter[][]): Filter[] {
+  const seen = new Set<string>();
+  const out: Filter[] = [];
+  for (const f of lists.flat()) {
+    if (!f.values.length) continue;
+    const sig = `${f.field}|${f.op}|${[...f.values].sort().join(",")}`;
+    if (seen.has(sig)) continue;
+    seen.add(sig);
+    out.push(f);
+  }
+  return out;
 }
 
 /* ═══ filter state helpers (ui.filters[viewKey]) ═══ */
@@ -167,10 +217,8 @@ export function FilterButton({ viewKey, teamId }: { viewKey: string; teamId?: st
   const [anchor, setAnchor] = useState<HTMLButtonElement | null>(null);
   const [open, setOpen] = useState(false);
   const [field, setField] = useState<FilterField | null>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
   const filters = useUI((u) => u.filters[viewKey]);
   const cyclesOn = useSync((s) => (teamId ? Boolean(s.teams[teamId]?.cycles_enabled) : true));
-  usePopoverFix(open, menuRef, true);
 
   const close = useCallback(() => { setOpen(false); setField(null); }, []);
 
@@ -179,7 +227,7 @@ export function FilterButton({ viewKey, teamId }: { viewKey: string; teamId?: st
     const onKey = (e: KeyboardEvent) => {
       if (e.defaultPrevented || e.isComposing || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
       if (e.key !== "f" && e.key !== "F") return;
-      if (isTypingTarget(e.target) || anyOverlayOpen()) return;
+      if (isTypingTarget(e.target) || overlayActive()) return;
       e.preventDefault();
       setField(null);
       setOpen(true);
@@ -215,13 +263,12 @@ export function FilterButton({ viewKey, teamId }: { viewKey: string; teamId?: st
         onClick={() => { setField(null); setOpen((o) => !o); }}
       />
       <Popover open={open} onClose={close} anchor={anchor} align="end" width={field ? 280 : 248}>
-        <div ref={menuRef}>
-          {field ? (
-            <FieldValues viewKey={viewKey} field={field} teamId={teamId} onBack={() => setField(null)} />
-          ) : (
-            <SelectMenu items={fieldItems} onSelect={(f) => setField(f as FilterField)} placeholder="Filter by…" />
-          )}
-        </div>
+        {/* each step mounts a fresh SelectMenu whose search box takes focus (autoFocus) */}
+        {field ? (
+          <FieldValues viewKey={viewKey} field={field} teamId={teamId} onBack={() => setField(null)} />
+        ) : (
+          <SelectMenu items={fieldItems} onSelect={(f) => setField(f as FilterField)} placeholder="Filter by…" />
+        )}
       </Popover>
     </>
   );
@@ -264,7 +311,9 @@ function FieldValues({ viewKey, field, teamId, onBack }: { viewKey: string; fiel
 
 export function FilterBar({ viewKey, query }: { viewKey: string; query: IssueQuery }) {
   const filters = useUI((u) => u.filters[viewKey]);
-  const teamId = useViewTeamId(viewKey);
+  const savable = useSync((s) => scopeFilters(viewKey, s) !== null);
+  // chip options follow the query's team, like the FilterButton next to it
+  const teamId = query.teamId;
   if (!filters?.length) return null;
   return (
     <div className="flex flex-wrap items-center gap-1.5 border-t border-line px-3 py-2 md:px-4">
@@ -276,7 +325,7 @@ export function FilterBar({ viewKey, query }: { viewKey: string; query: IssueQue
       >
         Clear
       </button>
-      {!viewKey.startsWith("view:") && viewScope(viewKey) && (
+      {savable && (
         <>
           <span className="flex-1" />
           <SaveViewButton viewKey={viewKey} query={query} />
@@ -303,8 +352,6 @@ function FilterChip({ viewKey, filter, teamId }: { viewKey: string; filter: Filt
   const items = useFilterOptions(filter.field, teamId ?? statusTeam);
   const [anchor, setAnchor] = useState<HTMLButtonElement | null>(null);
   const [open, setOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
-  usePopoverFix(open, menuRef, true);
   const close = useCallback(() => setOpen(false), []);
 
   const meta = FIELD_META[filter.field];
@@ -351,16 +398,14 @@ function FilterChip({ viewKey, filter, teamId }: { viewKey: string; filter: Filt
         <X size={13} />
       </button>
       <Popover open={open} onClose={close} anchor={anchor} width={280}>
-        <div ref={menuRef}>
-          <SelectMenu
-            multi
-            items={items}
-            selected={filter.values}
-            onSelect={(v) => toggleFilterValue(viewKey, filter.field, v, filter.id)}
-            placeholder={`Filter by ${meta.label.toLowerCase()}…`}
-            digitShortcuts={false}
-          />
-        </div>
+        <SelectMenu
+          multi
+          items={items}
+          selected={filter.values}
+          onSelect={(v) => toggleFilterValue(viewKey, filter.field, v, filter.id)}
+          placeholder={`Filter by ${meta.label.toLowerCase()}…`}
+          digitShortcuts={false}
+        />
       </Popover>
     </div>
   );
@@ -368,45 +413,28 @@ function FilterChip({ viewKey, filter, teamId }: { viewKey: string; filter: Filt
 
 /* ═══ save the current filters + display as a view ═══ */
 
-/**
- * Filters that reproduce a view's scope inside a saved view (the team tabs' Active/Backlog
- * scopes already travel as base filters in query.filters). null = the scope can't be
- * expressed as filters (e.g. "Subscribed"), so saving would silently broaden the view.
- */
-function viewScope(viewKey: string): Filter[] | null {
-  const [kind, id] = viewKey.split(":");
-  switch (kind) {
-    case "project": return id ? [{ id: "scope", field: "project", op: "is", values: [id] }] : [];
-    case "cycle": return id ? [{ id: "scope", field: "cycle", op: "is", values: [id] }] : [];
-    case "my":
-      if (id === "assigned") return [{ id: "scope", field: "assignee", op: "is", values: ["me"] }];
-      if (id === "created") return [{ id: "scope", field: "creator", op: "is", values: ["me"] }];
-      return null;
-    default: return [];
-  }
-}
-
 function SaveViewButton({ viewKey, query }: { viewKey: string; query: IssueQuery }) {
   const [anchor, setAnchor] = useState<HTMLButtonElement | null>(null);
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const teamId = useViewTeamId(viewKey);
-  const teamName = useSync((s) => (teamId ? s.teams[teamId]?.name : undefined));
-  usePopoverFix(open, inputRef, true);
+  const teamName = useSync((s) => {
+    const teamId = scopeFilters(viewKey, s)?.teamId;
+    return teamId ? s.teams[teamId]?.name : undefined;
+  });
   const close = useCallback(() => { setOpen(false); setName(""); }, []);
 
   const save = async () => {
     const trimmed = name.trim();
-    if (!trimmed || busy) return;
+    const scope = scopeFilters(viewKey);
+    if (!trimmed || busy || !scope) return;
     setBusy(true);
     const view = await createView({
       name: trimmed,
-      // fresh ids: base filters carry fixed ids that must not collide inside the saved view
-      filters: [...(viewScope(viewKey) ?? []), ...query.filters].map((f) => ({ ...f, id: uuid() })),
+      // the view's scope + its base and user filters; fresh ids so fixed base ids never collide
+      filters: mergeFilters([scope.filters, query.filters]).map((f) => ({ ...f, id: uuid() })),
       display: query.display,
-      team_id: teamId ?? null,
+      team_id: scope.teamId,
     });
     setBusy(false);
     if (!view) return; // failure already toasted
@@ -424,7 +452,7 @@ function SaveViewButton({ viewKey, query }: { viewKey: string; query: IssueQuery
           <p className="mb-2.5 mt-0.5 text-xxs text-faint">
             Keeps these filters and display options{teamName ? ` for ${teamName}` : ""}.
           </p>
-          <Input ref={inputRef} value={name} onChange={(e) => setName(e.target.value)} placeholder="View name" maxLength={80} aria-label="View name" />
+          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="View name" maxLength={80} aria-label="View name" />
           <div className="mt-3 flex justify-end gap-2">
             <Button type="button" variant="ghost" size="sm" onClick={close}>Cancel</Button>
             <Button type="submit" variant="primary" size="sm" loading={busy} disabled={!name.trim()}>Save view</Button>

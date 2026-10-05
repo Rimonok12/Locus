@@ -15,6 +15,9 @@ import Mention, { type MentionOptions } from "@tiptap/extension-mention";
 
 export const LINK_ATTRS = { rel: "noopener noreferrer nofollow", target: "_blank" } as const;
 
+/** Marks floating UI that belongs to an editor (selection toolbar): focus moving there is not "leaving" it. */
+export const EDITOR_UI_ATTR = "data-locus-editor-ui";
+
 export type MentionSuggestion = MentionOptions["suggestion"];
 
 /**
@@ -47,16 +50,23 @@ export function coreExtensions(suggestion?: MentionSuggestion): Extensions {
 /* ─── untrusted input ─── */
 
 /* The Link mark keeps any `class` it finds on <a>, so crafted HTML could style a link as a
-   full-screen overlay (`fixed inset-0 …`). Everything else the schema keeps is inert. */
-function scrubLinks(root: ParentNode) {
+   full-screen overlay (`fixed inset-0 …`), and the Image node keeps width/height attributes that
+   could blow an image up over the page (the editor never sets either). Everything else the schema
+   keeps is inert. */
+const SCRUB_TEST = /<a\b[^>]*\bclass\s*=|<img\b[^>]*\b(?:width|height)\s*=/i;
+function scrubAttrs(root: ParentNode) {
   root.querySelectorAll("a[class]").forEach((a) => a.removeAttribute("class"));
+  root.querySelectorAll("img[width], img[height]").forEach((img) => {
+    img.removeAttribute("width");
+    img.removeAttribute("height");
+  });
 }
 
 /** Stored HTML made safe to load into the live editor (the schema drops everything else). */
 export function editorInput(html: string): string {
-  if (!html || typeof window === "undefined" || !/<a\b[^>]*\bclass\s*=/i.test(html)) return html;
+  if (!html || typeof window === "undefined" || !SCRUB_TEST.test(html)) return html;
   const parsed = new window.DOMParser().parseFromString(`<body>${html}</body>`, "text/html");
-  scrubLinks(parsed.body);
+  scrubAttrs(parsed.body);
   return parsed.body.innerHTML;
 }
 
@@ -76,7 +86,7 @@ export function sanitizeHtml(html: string): string {
   schema ??= getSchema(coreExtensions());
   // DOMParser documents are inert: no scripts run, no images load, no handlers fire.
   const parsed = new window.DOMParser().parseFromString(`<body>${html}</body>`, "text/html");
-  scrubLinks(parsed.body);
+  scrubAttrs(parsed.body);
   const doc = PMDOMParser.fromSchema(schema).parse(parsed.body);
 
   const out = document.implementation.createHTMLDocument("");
@@ -89,8 +99,8 @@ export function sanitizeHtml(html: string): string {
   container.querySelectorAll("a[href]").forEach((a) => {
     a.setAttribute("target", LINK_ATTRS.target);
     a.setAttribute("rel", LINK_ATTRS.rel);
-    a.removeAttribute("class");
   });
+  scrubAttrs(container);
   const result = container.innerHTML;
 
   if (cache.size >= CACHE_MAX) {

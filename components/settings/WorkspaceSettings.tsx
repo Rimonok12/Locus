@@ -2,13 +2,13 @@
 /* ─── Locus · settings › workspace general (logo, name, URL, danger zone) ─── */
 
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
-import { ImagePlus, Loader2, LogOut, Trash2 } from "lucide-react";
+import { ImagePlus, LogOut, Trash2 } from "lucide-react";
 import { useSync } from "@/lib/sync/store";
 import { toast, ui } from "@/lib/ui";
 import { useIsAdmin, useMeId, useWorkspace } from "@/lib/model";
 import { deleteWorkspace, leaveWorkspace, updateWorkspace, uploadWorkspaceLogo } from "@/lib/sync/actions";
-import { Button } from "@/components/primitives/controls";
-import { AdminNote, Card, DangerOutlineButton, Row, Section, SettingsPage, TextField, TypeToConfirm, acceptImage, plural } from "./kit";
+import { Button, Spinner } from "@/components/primitives/controls";
+import { AdminNote, Card, Row, Section, SettingsPage, TextField, TypeToConfirm, acceptImage, plural } from "./kit";
 
 const SLUG = /^[a-z0-9][a-z0-9-]{1,46}[a-z0-9]$/;
 const RESERVED = new Set([
@@ -84,7 +84,7 @@ export default function WorkspaceSettings() {
                     uploading ? "opacity-100" : "opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100"
                   }`}
                 >
-                  {uploading ? <Loader2 size={16} className="animate-spin" /> : <ImagePlus size={16} />}
+                  {uploading ? <Spinner className="text-white" /> : <ImagePlus size={16} />}
                 </span>
               )}
             </button>
@@ -131,7 +131,9 @@ export default function WorkspaceSettings() {
             label="Leave workspace"
             description={leaveBlocked ?? `You'll lose access to ${ws.name} until someone invites you again.`}
           >
-            <DangerOutlineButton
+            <Button
+              size="sm"
+              className="text-danger max-sm:h-8"
               icon={<LogOut size={13} />}
               disabled={Boolean(leaveBlocked)}
               onClick={() =>
@@ -144,7 +146,7 @@ export default function WorkspaceSettings() {
                 })}
             >
               Leave
-            </DangerOutlineButton>
+            </Button>
           </Row>
           <Row
             label="Delete workspace"
@@ -212,7 +214,7 @@ function SlugField({ slug, disabled }: { slug: string; disabled: boolean }) {
   return (
     <div className="w-full sm:w-[300px]">
       <div
-        className={`flex h-8 items-stretch overflow-hidden rounded-md border transition-colors focus-within:border-accent focus-within:ring-2 focus-within:ring-accent-soft ${
+        className={`flex h-9 items-stretch overflow-hidden rounded-md border transition-colors sm:h-8 focus-within:border-accent focus-within:ring-2 focus-within:ring-accent-soft ${
           error ? "border-danger" : "border-line-strong"
         } ${disabled ? "bg-raised" : "bg-surface"}`}
       >
@@ -232,7 +234,7 @@ function SlugField({ slug, disabled }: { slug: string; disabled: boolean }) {
             if (e.key === "Enter") { e.preventDefault(); save(); }
             if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); setDraft(slug); e.currentTarget.blur(); }
           }}
-          className="min-w-0 flex-1 bg-transparent px-2 text-[13px] text-ink outline-none disabled:cursor-not-allowed disabled:text-dim"
+          className="min-w-0 flex-1 bg-transparent px-2 text-[16px] text-ink outline-none disabled:cursor-not-allowed disabled:text-dim sm:text-[13px]"
         />
       </div>
       {error && <div className="mt-1 text-xxs text-danger">{error}</div>}

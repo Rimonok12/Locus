@@ -1,41 +1,58 @@
 "use client";
-/* ─── Locus · inbox right pane: the selected notification's issue or project ─── */
+/* ─── Locus · inbox right pane: the selected notification's issue or project ──
+   Issues render as the embedded issue page (its own compact bar, no page
+   chrome, no Escape → back / J·K / URL following — the inbox owns those keys).
+   Project notifications get a summary card under a bar of the same shape.
+   ──────────────────────────────────────────────────────────────────────────── */
 
 import { useMemo } from "react";
-import { ArrowUpRight, CalendarDays, Hexagon } from "lucide-react";
+import { Archive, ArrowUpRight, CalendarDays, Hexagon } from "lucide-react";
 import { useSync } from "@/lib/sync/store";
 import { HEALTH_LABEL, PROJECT_STATUS_LABEL, displayName, issueKey, progressOf } from "@/lib/model";
 import { formatDate, timeAgo } from "@/lib/format";
-import { linkProps } from "@/lib/router";
+import { linkProps, type Route } from "@/lib/router";
 import IssueView from "@/components/issue/IssueView";
 import { RichText } from "@/components/editor/Editor";
 import { Avatar } from "@/components/primitives/Avatar";
-import { EmptyState, ProgressBar } from "@/components/primitives/controls";
+import { Button, EmptyState, ProgressBar } from "@/components/primitives/controls";
 import { HealthDot, ProjectIcon, ProjectStatusIcon } from "@/components/primitives/icons";
 import type { Notification } from "@/lib/types";
 
-export default function InboxDetail({ n }: { n: Notification }) {
+export interface InboxDetailProps {
+  n: Notification;
+  /** archive this notification (offered when what it points at is gone) */
+  onArchive: (id: string) => void;
+}
+
+export default function InboxDetail({ n, onArchive }: InboxDetailProps) {
   const issue = useSync((s) => (n.issue_id ? s.issues[n.issue_id] : undefined));
   const teams = useSync((s) => s.teams);
 
   if (issue) {
     return (
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <IssueView key={issue.id} identifier={issueKey(issue, teams)} />
+        <IssueView key={issue.id} identifier={issueKey(issue, teams)} embedded />
       </div>
     );
   }
-  if (n.project_id) return <ProjectCard projectId={n.project_id} />;
+  if (n.project_id) return <ProjectPane n={n} projectId={n.project_id} onArchive={onArchive} />;
+  return <Unavailable what="item" onArchive={() => onArchive(n.id)} />;
+}
+
+function Unavailable({ what, onArchive }: { what: "item" | "project"; onArchive: () => void }) {
   return (
     <EmptyState
       icon={<Hexagon size={28} strokeWidth={1.5} />}
-      title="This item is no longer available"
-      body="It was deleted, or you no longer have access to it. You can archive this notification."
+      title={`This ${what} is no longer available`}
+      body="It was deleted, or you no longer have access to it."
+      action={<Button variant="secondary" size="md" icon={<Archive size={14} />} onClick={onArchive}>Archive notification</Button>}
     />
   );
 }
 
-function ProjectCard({ projectId }: { projectId: string }) {
+/* ─── project notifications ─── */
+
+function ProjectPane({ n, projectId, onArchive }: InboxDetailProps & { projectId: string }) {
   const project = useSync((s) => s.projects[projectId]);
   const updates = useSync((s) => s.project_updates);
   const issues = useSync((s) => s.issues);
@@ -52,26 +69,32 @@ function ProjectCard({ projectId }: { projectId: string }) {
     [issues, states, projectId],
   );
 
-  if (!project) {
-    return (
-      <EmptyState
-        icon={<Hexagon size={28} strokeWidth={1.5} />}
-        title="This project is no longer available"
-        body="It was deleted, or you no longer have access to it."
-      />
-    );
-  }
+  if (!project) return <Unavailable what="project" onArchive={() => onArchive(n.id)} />;
 
-  const open = linkProps({ kind: "project", id: project.id, tab: "overview" });
+  const to: Route = { kind: "project", id: project.id, tab: n.type === "project_update" ? "updates" : "overview" };
+  const open = linkProps(to);
   const pct = Math.round(progress.ratio * 100);
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-      <div className="flex h-12 shrink-0 items-center gap-2 border-b border-line px-4">
-        <ProjectIcon icon={project.icon} color={project.color} size={15} />
-        <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-ink">{project.name}</span>
-        <a {...open} className="focus-ring inline-flex h-7 items-center gap-1.5 rounded-md border border-line-strong bg-surface px-2.5 text-[12.5px] font-medium text-ink shadow-card hover:bg-wash">
-          Open project <ArrowUpRight size={13} className="text-faint" />
+      {/* same shape as the embedded issue page's bar, so switching notifications doesn't shift the pane */}
+      <div className="flex h-11 shrink-0 items-center gap-2 border-b border-line bg-canvas pl-4 pr-2">
+        <a
+          {...open}
+          title="Open project"
+          className="focus-ring -ml-1 flex h-7 min-w-0 items-center gap-1.5 rounded px-1 text-[13px] transition-colors hover:bg-wash"
+        >
+          <ProjectIcon icon={project.icon} color={project.color} size={14} />
+          <span className="min-w-0 truncate font-medium text-ink">{project.name}</span>
+        </a>
+        <a
+          {...open}
+          aria-label="Open project"
+          title="Open project"
+          className="focus-ring ml-auto inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border border-line-strong bg-surface px-2 text-[12.5px] font-medium text-ink shadow-card transition-colors hover:bg-wash"
+        >
+          <span className="hidden xl:inline">Open</span>
+          <ArrowUpRight size={14} className="text-faint" />
         </a>
       </div>
 
@@ -87,7 +110,7 @@ function ProjectCard({ projectId }: { projectId: string }) {
             </div>
           </div>
 
-          <dl className="mt-6 grid grid-cols-2 gap-x-6 gap-y-4 rounded-lg border border-line bg-surface p-4 text-[12.5px] shadow-card lg:grid-cols-4">
+          <dl className="mt-6 grid grid-cols-2 gap-x-6 gap-y-4 rounded-lg border border-line bg-surface p-4 text-[12.5px] shadow-card xl:grid-cols-4">
             <div>
               <dt className="text-xxs font-medium text-faint">Status</dt>
               <dd className="mt-1 flex items-center gap-1.5 text-ink"><ProjectStatusIcon status={project.status} />{PROJECT_STATUS_LABEL[project.status]}</dd>
@@ -104,7 +127,7 @@ function ProjectCard({ projectId }: { projectId: string }) {
               <dt className="text-xxs font-medium text-faint">Target date</dt>
               <dd className="mt-1 flex items-center gap-1.5 text-ink"><CalendarDays size={13} className="text-faint" />{project.target_date ? formatDate(project.target_date) : "Not set"}</dd>
             </div>
-            <div className="col-span-2 lg:col-span-4">
+            <div className="col-span-2 xl:col-span-4">
               <dt className="flex items-center justify-between text-xxs font-medium text-faint">
                 <span>Progress</span>
                 <span className="tabular-nums">{progress.done} / {progress.total} issues · {pct}%</span>

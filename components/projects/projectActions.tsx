@@ -2,7 +2,7 @@
 /* ─── Locus · project-level actions shared by the list context menu and the project header ─── */
 
 import { Archive, ArchiveRestore, ArrowUpRight, Link2, Star, Trash2 } from "lucide-react";
-import { copyText, deleteProject, isFavorite, toggleFavorite, updateProject } from "@/lib/sync/actions";
+import { copyText, deleteProject, toggleFavorite, updateProject } from "@/lib/sync/actions";
 import { navigate } from "@/lib/router";
 import { toast, ui } from "@/lib/ui";
 import type { ActionItem } from "@/components/primitives/SelectMenu";
@@ -32,10 +32,8 @@ export function confirmDeleteProject(p: Pick<Project, "id" | "name">, opts: { le
       }
       const ok = await deleteProject(p.id);
       leavingProjects.delete(p.id);
-      if (!ok) return;
-      // favorites aren't foreign-keyed to their target — drop ours so it doesn't linger
-      if (isFavorite("project", p.id)) void toggleFavorite("project", p.id);
-      toast(`Deleted ${p.name}`);
+      // favorites of the project are removed by the database (favorites_cleanup trigger)
+      if (ok) toast(`Deleted ${p.name}`);
     },
   });
 }

@@ -17,7 +17,7 @@ function SubIssueRow({ sub }: { sub: Issue }) {
   const key = issueKey(sub, teams);
   return (
     <div className="group flex h-9 items-center gap-1.5 rounded-md pl-0.5 pr-1 transition-colors hover:bg-wash">
-      <span className="inline-flex [&>button]:h-8 [&>button]:w-8 sm:[&>button]:h-7 sm:[&>button]:w-7">
+      <span className="inline-flex sm:[&>button]:h-7 sm:[&>button]:w-7">
         <PropertyChip issue={sub} kind="status" variant="icon" />
       </span>
       <a {...linkProps({ kind: "issue", identifier: key })} className="flex h-full min-w-0 flex-1 items-center gap-2 text-[13px]">
@@ -25,7 +25,7 @@ function SubIssueRow({ sub }: { sub: Issue }) {
         <span className="min-w-0 truncate text-ink">{sub.title}</span>
       </a>
       <span className="hidden sm:inline-flex sm:[&>button]:h-7 sm:[&>button]:w-7"><PropertyChip issue={sub} kind="priority" variant="icon" /></span>
-      <span className="inline-flex [&>button]:h-8 [&>button]:w-8 sm:[&>button]:h-7 sm:[&>button]:w-7">
+      <span className="inline-flex sm:[&>button]:h-7 sm:[&>button]:w-7">
         <PropertyChip issue={sub} kind="assignee" variant="icon" />
       </span>
     </div>

@@ -16,7 +16,7 @@ import { SelectMenu } from "@/components/primitives/SelectMenu";
 import { TeamIcon } from "@/components/primitives/icons";
 import type { Profile, Team } from "@/lib/types";
 import {
-  Card, ColorSwatches, Count, DangerOutlineButton, EmojiMenu, FOCUS, PopoverBody, Row, Section, SettingsPage, TextField, TypeToConfirm, plural,
+  Card, ColorSwatches, Count, EmojiMenu, Row, Section, SettingsPage, TextField, TypeToConfirm, plural,
 } from "./kit";
 import { teamKeyError } from "./TeamsSettings";
 import WorkflowEditor from "./WorkflowEditor";
@@ -250,20 +250,18 @@ function MembersSection({ team }: { team: Team }) {
           )}
         >
           {(close) => (
-            <PopoverBody focus={FOCUS.search}>
-              <SelectMenu
-                items={candidates.map((p) => ({
-                  id: p.id,
-                  label: p.id === me ? `${displayName(p)} (you)` : displayName(p),
-                  icon: <Avatar profile={p} size={16} />,
-                  keywords: [p.email, p.display_name],
-                }))}
-                onSelect={(id) => { close(); void add(id); }}
-                placeholder="Add to team…"
-                emptyText="No one to add"
-                digitShortcuts={false}
-              />
-            </PopoverBody>
+            <SelectMenu
+              items={candidates.map((p) => ({
+                id: p.id,
+                label: p.id === me ? `${displayName(p)} (you)` : displayName(p),
+                icon: <Avatar profile={p} size={16} />,
+                keywords: [p.email, p.display_name],
+              }))}
+              onSelect={(id) => { close(); void add(id); }}
+              placeholder="Add to team…"
+              emptyText="No one to add"
+              digitShortcuts={false}
+            />
           )}
         </Dropdown>
       }
@@ -359,35 +357,32 @@ function CyclesSection({ team }: { team: Team }) {
             align="end"
             disabled={!team.cycles_enabled}
             trigger={(p) => (
-              <button
+              <Button
                 ref={p.ref}
                 type="button"
                 onClick={p.onClick}
                 aria-expanded={p["aria-expanded"]}
                 aria-label="Cycle duration"
                 disabled={!team.cycles_enabled}
-                className="focus-ring inline-flex h-8 items-center gap-1.5 rounded-md border border-line-strong bg-surface px-2.5 text-[12.5px] font-medium text-ink shadow-card hover:bg-wash disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-surface"
+                className="h-8"
               >
                 {plural(weeks, "week")}
                 <ChevronDown size={12} className="text-faint" />
-              </button>
+              </Button>
             )}
           >
             {(close) => (
-              <PopoverBody focus={FOCUS.search}>
-                <SelectMenu
-                  items={[1, 2, 3, 4, 5, 6, 7, 8].map((n) => ({ id: String(n), label: plural(n, "week") }))}
-                  selected={String(weeks)}
-                  onSelect={(id) => {
-                    close();
-                    const n = Number(id);
-                    if (n === weeks) return;
-                    void updateTeam(team.id, { cycle_duration_weeks: n }).then((ok) => { if (ok) toast.success(`Cycles now last ${plural(n, "week")}`); });
-                  }}
-                  placeholder="Duration…"
-                  autoFocus
-                />
-              </PopoverBody>
+              <SelectMenu
+                items={[1, 2, 3, 4, 5, 6, 7, 8].map((n) => ({ id: String(n), label: plural(n, "week") }))}
+                selected={String(weeks)}
+                onSelect={(id) => {
+                  close();
+                  const n = Number(id);
+                  if (n === weeks) return;
+                  void updateTeam(team.id, { cycle_duration_weeks: n }).then((ok) => { if (ok) toast.success(`Cycles now last ${plural(n, "week")}`); });
+                }}
+                placeholder="Duration…"
+              />
             )}
           </Dropdown>
         </Row>
@@ -445,7 +440,7 @@ function DangerSection({ team }: { team: Team }) {
           description={joined ? "Stop seeing this team in your sidebar. You can rejoin anytime." : "You're not a member of this team."}
         >
           {joined ? (
-            <DangerOutlineButton icon={<LogOut size={13} />} onClick={leave}>Leave team</DangerOutlineButton>
+            <Button size="sm" className="text-danger max-sm:h-8" icon={<LogOut size={13} />} onClick={leave}>Leave team</Button>
           ) : (
             <Button size="sm" className="max-sm:h-8" icon={<UserPlus size={13} />} onClick={async () => { if (await joinTeam(team.id)) toast.success(`Joined ${team.name}`); }}>
               Join team

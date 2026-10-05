@@ -1,14 +1,15 @@
 "use client";
 /* ─── Locus · issue surfaces · shared pieces (group icons, row chips, toolbar button, helpers) ─── */
 
-import { forwardRef, useEffect, type ButtonHTMLAttributes, type ReactNode, type RefObject } from "react";
-import { flushSync } from "react-dom";
+import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from "react";
 import { CalendarDays, Hexagon, Layers, RefreshCw, Tag, Triangle } from "lucide-react";
 import { useSync } from "@/lib/sync/store";
+import { useUI } from "@/lib/ui";
 import { STATE_TYPES, STATE_TYPE_COLOR, cycleName, type IssueGroup, type QueryCtx } from "@/lib/model";
 import { dueInfo, formatDate, formatDateTime, shortAge } from "@/lib/format";
 import { Avatar } from "@/components/primitives/Avatar";
 import { LabelDot, PriorityIcon, ProgressRing, ProjectIcon, StateIcon, TeamIcon } from "@/components/primitives/icons";
+import { anyOverlayOpen } from "@/components/primitives/overlay";
 import { StateGlyph } from "@/components/pickers";
 import type { Filter, Priority, StateType } from "@/lib/types";
 
@@ -27,6 +28,17 @@ export function isInteractiveTarget(t: EventTarget | null): boolean {
   const el = t as HTMLElement | null;
   if (!el || typeof el.closest !== "function") return false;
   return Boolean(el.closest("button, a[href], summary, [role='button'], [role='menuitem'], [role='checkbox'], [role='switch'], [role='option']"));
+}
+
+/**
+ * true while something layered owns the keyboard: a popover/modal (overlay registry), the mobile
+ * nav drawer (anyOverlayOpen covers it), or a store-driven overlay that is opening this tick
+ * (palette, create-issue, picker, shortcuts help, confirm) before its Modal has registered.
+ */
+export function overlayActive(): boolean {
+  if (anyOverlayOpen()) return true;
+  const u = useUI.getState();
+  return Boolean(u.paletteOpen || u.createIssue || u.picker || u.shortcutsOpen || u.confirm);
 }
 
 export function sameIds(a: readonly string[], b: readonly string[]): boolean {
@@ -70,62 +82,6 @@ export function statusGroupAllowed(group: IssueGroup, filters: Filter[], ctx: Qu
     }
   }
   return true;
-}
-
-/**
- * The shared Popover measures itself in a layout effect that runs before its portal has
- * mounted the content (and only observes its size if the node already existed), so it can
- * stay hidden/unpositioned until the next window scroll or resize. Once `contentRef` (an
- * element inside the popover) exists, nudge it to measure, keep it measured while the
- * content resizes, and optionally move focus to the first input (autoFocus fired while hidden).
- */
-export function usePopoverFix(open: boolean, contentRef: RefObject<HTMLElement | null>, focus = false) {
-  useEffect(() => {
-    if (!open) return;
-    let raf = 0;
-    let tries = 0;
-    let ro: ResizeObserver | null = null;
-    const nudge = () => window.dispatchEvent(new Event("resize"));
-    const tick = () => {
-      const root = contentRef.current;
-      if (!root) {
-        if (tries++ < 12) raf = requestAnimationFrame(tick);
-        return;
-      }
-      flushSync(nudge);
-      if (typeof ResizeObserver !== "undefined") {
-        let first = true;
-        ro = new ResizeObserver(() => { if (first) { first = false; return; } nudge(); });
-        ro.observe(root);
-      }
-      if (!focus) return;
-      const el = root.matches("input, textarea") ? root : root.querySelector<HTMLElement>("input, textarea");
-      if (el && document.activeElement !== el) el.focus({ preventScroll: true });
-    };
-    raf = requestAnimationFrame(tick);
-    return () => {
-      cancelAnimationFrame(raf);
-      ro?.disconnect();
-    };
-  }, [open, contentRef, focus]);
-}
-
-/**
- * Same workaround for popovers this module doesn't own (PropertyChip dropdowns in rows):
- * after a trigger opens one, wait for its portal content, nudge it into place and focus
- * its search box. Harmless once the shared Popover measures correctly by itself.
- */
-export function nudgeOpeningPopover() {
-  let frames = 0;
-  const run = () => {
-    if (++frames < 3) { requestAnimationFrame(run); return; }
-    flushSync(() => { window.dispatchEvent(new Event("resize")); });
-    const active = document.activeElement as HTMLElement | null;
-    if (active?.matches?.("input, textarea, select, [contenteditable='true']")) return;
-    const inputs = document.querySelectorAll<HTMLElement>("div.fixed[role='dialog'] [cmdk-input]");
-    inputs[inputs.length - 1]?.focus({ preventScroll: true });
-  };
-  requestAnimationFrame(run);
 }
 
 /* ═══ header toolbar button (Filter / Display / favorite) ═══ */

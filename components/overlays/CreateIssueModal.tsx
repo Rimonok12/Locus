@@ -1,8 +1,11 @@
 "use client";
 /* ─── Locus · create issue modal (C) ─────────────────────────────────────────
-   Title + rich description + property chips. Drafts persist to localStorage
-   while typing and come back when the modal is opened without explicit
-   defaults. "Create more" keeps the modal open with the same properties.
+   Title + rich description + property chips. The draft persists to localStorage
+   while typing and comes back the next time the modal opens — wherever it is
+   opened from, with that place's context (team, status, project, cycle…) applied
+   on top. Openers that create something specific (a sub-issue, a prefilled
+   title) start fresh and never overwrite a saved draft. "Create more" keeps the
+   modal open with the same properties.
    ──────────────────────────────────────────────────────────────────────────── */
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
@@ -23,6 +26,7 @@ import {
 } from "@/components/pickers";
 import Editor, { isEmptyHtml } from "@/components/editor/Editor";
 import { keys } from "./commands";
+import { useRestoreFocus } from "./useRestoreFocus";
 import type { Issue, Priority } from "@/lib/types";
 
 /* ═══ draft storage ═══ */
@@ -102,18 +106,48 @@ export default function CreateIssueModal() {
   );
 }
 
-function initialState(defaults: Partial<Issue>): { draft: boolean; teamId: string | null; title: string; description: string; props: Props } {
-  const explicit = Object.values(defaults).some((v) => v !== undefined && v !== null);
-  const draft = explicit ? null : readDraft();
-  if (draft && draftHasContent(draft)) {
-    return { draft: true, teamId: draft.team_id, title: draft.title, description: draft.description, props: draft.props };
-  }
+const PROP_KEYS: (keyof Props)[] = [
+  "state_id", "priority", "assignee_id", "label_ids", "project_id", "milestone_id", "cycle_id", "estimate", "due_date", "parent_id",
+];
+
+interface Init {
+  /** the stored draft was restored into this composer */
+  restored: boolean;
+  /** this composer may write the draft slot (false when it would clobber someone else's saved draft) */
+  persist: boolean;
+  teamId: string | null;
+  title: string;
+  description: string;
+  props: Props;
+}
+
+/** A fresh composer for these defaults (no draft involved). */
+function freshState(defaults: Partial<Issue>): Pick<Init, "teamId" | "title" | "description" | "props"> {
   return {
-    draft: false,
     teamId: defaults.team_id ?? null,
     title: defaults.title ?? "",
     description: defaults.description ?? "",
     props: propsFrom(defaults),
+  };
+}
+
+function initialState(defaults: Partial<Issue>): Init {
+  // defaults that say *what* is being created (vs. where): the draft must not replace them
+  const specific = Boolean(defaults.title || defaults.description || defaults.parent_id);
+  const stored = readDraft();
+  const draft = stored && draftHasContent(stored) ? stored : null;
+  if (!draft) return { restored: false, persist: true, ...freshState(defaults) };
+  if (specific) return { restored: false, persist: false, ...freshState(defaults) };
+  // continue the draft here: the opener's context (team, status, project, cycle, assignee…) wins
+  const context: Partial<Record<keyof Props, unknown>> = {};
+  for (const k of PROP_KEYS) if (defaults[k] !== undefined) context[k] = defaults[k];
+  return {
+    restored: true,
+    persist: true,
+    teamId: defaults.team_id ?? draft.team_id,
+    title: draft.title,
+    description: draft.description,
+    props: propsFrom({ ...draft.props, ...context }),
   };
 }
 
@@ -125,14 +159,17 @@ function Composer({ defaults }: { defaults: Partial<Issue> }) {
   const [props, setProps] = useState<Props>(init.props);
   const [editorKey, setEditorKey] = useState(0);
   const [createMore, setCreateMore] = useState(readCreateMore);
+  const [restored, setRestored] = useState(init.restored);
 
   const titleRef = useRef<HTMLInputElement>(null);
   const descRef = useRef<HTMLDivElement>(null);
   const dirty = useRef(false);
   /** this composer currently owns the stored draft (restored it or wrote it) */
-  const ownsDraft = useRef(init.draft);
+  const ownsDraft = useRef(init.restored);
   const mounted = useRef(true);
   const submitting = useRef(false);
+  const leaving = useRef(false);
+  useRestoreFocus(() => leaving.current);
 
   /* store reads */
   const teams = useSync((s) => s.teams);
@@ -161,7 +198,7 @@ function Composer({ defaults }: { defaults: Partial<Issue> }) {
 
   /* persist the draft while the user works */
   useEffect(() => {
-    if (!dirty.current) return;
+    if (!dirty.current || !init.persist) return;
     const d: Draft = { team_id: teamId, title, description, props };
     if (!draftHasContent(d)) {
       if (ownsDraft.current) { clearDraft(); ownsDraft.current = false; }
@@ -169,7 +206,7 @@ function Composer({ defaults }: { defaults: Partial<Issue> }) {
     }
     writeDraft(d);
     ownsDraft.current = true;
-  }, [teamId, title, description, props]);
+  }, [init.persist, teamId, title, description, props]);
 
   /* focus the title with the caret at the end */
   useEffect(() => {
@@ -210,6 +247,21 @@ function Composer({ defaults }: { defaults: Partial<Issue> }) {
     try { window.localStorage.setItem(CREATE_MORE_KEY, v ? "1" : "0"); } catch { /* ignore */ }
   };
 
+  /** throw the restored draft away and start over from this opener's defaults */
+  const discardDraft = () => {
+    if (ownsDraft.current) clearDraft();
+    ownsDraft.current = false;
+    dirty.current = false;
+    const fresh = freshState(defaults);
+    setTeamId(fresh.teamId);
+    setTitle(fresh.title);
+    setDescription(fresh.description);
+    setProps(fresh.props);
+    setEditorKey((k) => k + 1);
+    setRestored(false);
+    titleRef.current?.focus();
+  };
+
   const focusDescription = () => {
     const el = descRef.current?.querySelector<HTMLElement>("[contenteditable='true'], textarea");
     el?.focus();
@@ -246,7 +298,7 @@ function Composer({ defaults }: { defaults: Partial<Issue> }) {
       setEditorKey((k) => k + 1);
       requestAnimationFrame(() => titleRef.current?.focus());
     } else {
-      clearDraft();
+      if (ownsDraft.current) clearDraft();
       ownsDraft.current = false;
       ui.closeCreateIssue();
     }
@@ -254,7 +306,7 @@ function Composer({ defaults }: { defaults: Partial<Issue> }) {
     createIssue(payload).then((issue) => {
       if (issue) {
         const stored = readDraft();
-        if (stored && stored.title === snapshot.title && stored.description === snapshot.description) clearDraft();
+        if (init.persist && stored && stored.title === snapshot.title && stored.description === snapshot.description) clearDraft();
         return;
       }
       // failed (already toasted): give the text back so nothing is lost
@@ -282,17 +334,18 @@ function Composer({ defaults }: { defaults: Partial<Issue> }) {
             <h2 className="text-[15px] font-semibold text-ink">Create a team first</h2>
             <p className="mt-1.5 text-[13px] leading-relaxed text-dim">Issues belong to a team. Create or join one to start tracking work.</p>
           </div>
-          <IconButton label="Close" onClick={ui.closeCreateIssue}><X size={15} /></IconButton>
+          <IconButton label="Close" size={32} onClick={ui.closeCreateIssue}><X size={15} /></IconButton>
         </div>
         <div className="mt-5 flex justify-end gap-2">
           <Button variant="ghost" onClick={ui.closeCreateIssue}>Cancel</Button>
-          <Button variant="primary" onClick={() => { ui.closeCreateIssue(); navigate({ kind: "settings", section: "teams" }); }}>Go to teams</Button>
+          <Button variant="primary" autoFocus onClick={() => { leaving.current = true; ui.closeCreateIssue(); navigate({ kind: "settings", section: "teams" }); }}>Go to teams</Button>
         </div>
       </div>
     );
   }
 
   const mod = keys.mod();
+  const showDiscard = restored && draftHasContent({ title, description });
 
   return (
     <div
@@ -326,8 +379,18 @@ function Composer({ defaults }: { defaults: Partial<Issue> }) {
           {(close) => <TeamMenu value={team.id} onChange={(id) => { changeTeam(id); close(); }} />}
         </Dropdown>
         <ChevronRight size={13} className="shrink-0 text-faint" />
-        <span className="truncate text-[13px] text-dim">{parent ? <>New sub-issue of <span className="text-ink">{issueKey(parent, teams)}</span></> : "New issue"}</span>
-        <IconButton label="Close" className="ml-auto" size={32} onClick={ui.closeCreateIssue}><X size={15} /></IconButton>
+        <span className="min-w-0 truncate text-[13px] text-dim">{parent ? <>New sub-issue of <span className="text-ink">{issueKey(parent, teams)}</span></> : "New issue"}</span>
+        {showDiscard && (
+          <button
+            type="button"
+            onClick={discardDraft}
+            title="Discard the saved draft and start over"
+            className="focus-ring ml-auto h-8 shrink-0 rounded-md px-2 text-[12px] text-faint transition-colors hover:bg-wash hover:text-ink sm:h-7"
+          >
+            Discard draft
+          </button>
+        )}
+        <IconButton label="Close" className={showDiscard ? "" : "ml-auto"} size={32} onClick={ui.closeCreateIssue}><X size={15} /></IconButton>
       </div>
 
       {/* body */}

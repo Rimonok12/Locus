@@ -1,16 +1,20 @@
 "use client";
 /* ─── Locus · issue detail page ──────────────────────────────────────────────
-   default IssueView({ identifier })  — route `issue/:KEY-123`
+   default IssueView({ identifier, embedded?, header? })  — route `issue/:KEY-123`
    Main column (title, description, sub-issues, relations, activity, composer)
    plus a 280px property sidebar on lg+; below lg the properties become a
    wrapping chip row above the title. The issue is pinned by id once resolved,
    so moving it to another team (which renumbers it) follows it to its new URL.
-   Also embedded by the inbox detail pane: URL-driving behaviour (follow-the-key,
-   Escape → back, J/K → previous/next) only runs when it is the routed view.
+   `embedded` renders it inside a parent pane (the inbox): a compact 44px bar
+   (identifier, issue actions, open full page) instead of the ViewHeader, and
+   none of the URL-driving behaviour (follow-the-key, Escape → back, J/K →
+   previous/next). Defaults to "not on the issue route". `header={false}` drops
+   the compact bar for a parent that renders its own (IssueHeaderActions with
+   context="embedded" gives that bar the same actions).
    ──────────────────────────────────────────────────────────────────────────── */
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Archive, Link2, Plus } from "lucide-react";
+import { Archive, ArrowUpRight, ChevronRight, Link2, Plus } from "lucide-react";
 import { useSync } from "@/lib/sync/store";
 import { ui, useUI } from "@/lib/ui";
 import { issueKey, useIssueByKey, useSubIssues } from "@/lib/model";
@@ -21,8 +25,8 @@ import { ViewHeader } from "@/components/app/Header";
 import NotFound from "@/components/app/NotFound";
 import { StateGlyph } from "@/components/pickers";
 import { TeamIcon } from "@/components/primitives/icons";
-import { Button } from "@/components/primitives/controls";
-import type { Issue } from "@/lib/types";
+import { Button, EmptyState } from "@/components/primitives/controls";
+import type { Issue, Team } from "@/lib/types";
 import { isBareEscape, isTypingTarget, overlayOpen, useIssueDetails } from "./shared";
 import { IssueTitle } from "./IssueTitle";
 import { IssueDescription } from "./IssueDescription";
@@ -34,8 +38,23 @@ import { IssueHeaderActions, stepIssue } from "./IssueActions";
 
 interface Pin { id: string; keys: string[] }
 
-export default function IssueView({ identifier }: { identifier: string }) {
-  const routed = useRoute().route.kind === "issue";
+/** How the page is mounted: the routed page, a pane with its compact bar, or a pane under the parent's own bar. */
+type Mode = "page" | "embedded" | "bare";
+
+const NO_IDS: string[] = [];
+
+export default function IssueView({ identifier, embedded, header = true }: {
+  identifier: string;
+  /** render inside a parent pane (inbox): compact bar, no Escape → back / J·K / URL following. Default: not on the issue route. */
+  embedded?: boolean;
+  /** embedded only — false when the parent renders its own bar above */
+  header?: boolean;
+}) {
+  const onIssueRoute = useRoute().route.kind === "issue";
+  const isEmbedded = embedded ?? !onIssueRoute;
+  const routed = !isEmbedded && onIssueRoute;
+  const mode: Mode = !isEmbedded ? "page" : header ? "embedded" : "bare";
+
   const byKey = useIssueByKey(identifier);
   const teams = useSync((s) => s.teams);
   const lastSyncedAt = useSync((s) => s.lastSyncedAt);
@@ -67,7 +86,7 @@ export default function IssueView({ identifier }: { identifier: string }) {
     return () => clearTimeout(t);
   }, [grace, lastSyncedAt]);
 
-  // prev/next: the list the user came from (captured on mount, refreshed while it still contains this issue)
+  // prev/next (routed page): the list the user came from, captured on mount, refreshed while it still contains this issue
   const [navIds, setNavIds] = useState<string[]>(() => useUI.getState().visibleIds);
   const liveIds = useUI((s) => s.visibleIds);
   const currentId = issue?.id;
@@ -75,14 +94,23 @@ export default function IssueView({ identifier }: { identifier: string }) {
     if (currentId && liveIds.length && liveIds.includes(currentId)) setNavIds(liveIds);
   }, [liveIds, currentId]);
 
-  if (!issue) return grace ? <IssueSkeleton identifier={identifier} /> : <NotFound what="issue" />;
-  return <IssuePage issue={issue} navIds={navIds} routed={routed} />;
+  if (!issue) {
+    if (grace) return <IssueSkeleton identifier={identifier} mode={mode} />;
+    if (mode === "page") return <NotFound what="issue" />;
+    return <EmptyState title="This issue doesn’t exist" body="It may have been deleted, or you might not have access to it." />;
+  }
+  return <IssuePage issue={issue} navIds={routed ? navIds : NO_IDS} routed={routed} mode={mode} />;
 }
 
-function IssueSkeleton({ identifier }: { identifier: string }) {
+function IssueSkeleton({ identifier, mode }: { identifier: string; mode: Mode }) {
   return (
     <>
-      <ViewHeader title={identifier} />
+      {mode === "page" && <ViewHeader title={identifier} />}
+      {mode === "embedded" && (
+        <div className="flex h-11 shrink-0 items-center border-b border-line bg-canvas px-4 text-[13px] font-medium tabular-nums text-dim">
+          {identifier}
+        </div>
+      )}
       <div className="mx-auto w-full max-w-[760px] px-4 pt-8 sm:px-6" aria-busy="true">
         <div className="skeleton h-7 w-3/5 rounded-md" />
         <div className="skeleton mt-5 h-4 w-11/12 rounded" />
@@ -93,7 +121,43 @@ function IssueSkeleton({ identifier }: { identifier: string }) {
   );
 }
 
-function IssuePage({ issue, navIds, routed }: { issue: Issue; navIds: string[]; routed: boolean }) {
+/** Compact 44px bar of the embedded page: team › KEY (opens the full page) · issue actions · Open. */
+function EmbeddedHeader({ issue, issueKey: key, team }: { issue: Issue; issueKey: string; team: Team | undefined }) {
+  const full = linkProps({ kind: "issue", identifier: key });
+  return (
+    <div className="flex h-11 shrink-0 items-center gap-2 border-b border-line bg-canvas pl-4 pr-2">
+      <a
+        {...full}
+        title="Open full page"
+        className="focus-ring -ml-1 flex h-7 min-w-0 items-center gap-1.5 rounded px-1 text-[13px] transition-colors hover:bg-wash"
+      >
+        <TeamIcon team={team} size={14} />
+        {team && (
+          <>
+            <span className="hidden min-w-0 truncate text-dim xl:inline">{team.name}</span>
+            <ChevronRight size={12} className="hidden shrink-0 text-faint xl:block" />
+          </>
+        )}
+        <span className="shrink-0 font-medium tabular-nums text-ink">{key}</span>
+      </a>
+      <div className="ml-auto flex shrink-0 items-center gap-0.5">
+        <IssueHeaderActions issue={issue} issueKey={key} navIds={NO_IDS} context="embedded" />
+        <span aria-hidden className="mx-1 h-4 w-px bg-line" />
+        <a
+          {...full}
+          aria-label="Open full page"
+          title="Open full page"
+          className="focus-ring inline-flex h-7 items-center gap-1.5 rounded-md border border-line-strong bg-surface px-2 text-[12.5px] font-medium text-ink shadow-card transition-colors hover:bg-wash"
+        >
+          <span className="hidden xl:inline">Open</span>
+          <ArrowUpRight size={14} className="text-faint" />
+        </a>
+      </div>
+    </div>
+  );
+}
+
+function IssuePage({ issue, navIds, routed, mode }: { issue: Issue; navIds: string[]; routed: boolean; mode: Mode }) {
   const teams = useSync((s) => s.teams);
   const team = teams[issue.team_id];
   const key = issueKey(issue, teams);
@@ -107,6 +171,7 @@ function IssuePage({ issue, navIds, routed }: { issue: Issue; navIds: string[]; 
   );
   const [addingSub, setAddingSub] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const page = mode === "page";
 
   useIssueDetails(issue.id);
 
@@ -116,18 +181,21 @@ function IssuePage({ issue, navIds, routed }: { issue: Issue; navIds: string[]; 
     setAddingSub(false);
   }, [issue.id]);
 
-  // global property shortcuts (S, P, A, L…) act on the focused issue: keep it pointed at this one
-  const focusedId = useUI((s) => s.focusedId);
-  useEffect(() => {
-    if (focusedId !== issue.id) ui.setFocused(issue.id);
-  }, [focusedId, issue.id]);
-  useEffect(() => () => {
-    if (useUI.getState().focusedId === issue.id) ui.setFocused(null);
-  }, [issue.id]);
-
-  // Escape (nothing open, not typing, nothing selected) → back · J / K → next / previous issue
-  const teamKey = team?.key;
+  /* Global property shortcuts (S, P, A, L…) act on the focused issue. Shell clears focus in a layout
+     effect on navigation — before this runs — so pointing it here when the issue mounts / changes is
+     enough. Archiving from the palette drops the issue from list focus while this page keeps showing
+     it, so a change of archive state points it back here as well. */
   const issueId = issue.id;
+  const archivedAt = issue.archived_at;
+  useEffect(() => {
+    ui.setFocused(issueId);
+  }, [issueId, archivedAt]);
+  useEffect(() => () => {
+    if (useUI.getState().focusedId === issueId) ui.setFocused(null);
+  }, [issueId]);
+
+  // routed page only — Escape (nothing open, not typing, nothing selected) → back · J / K → next / previous issue
+  const teamKey = team?.key;
   const navRef = useRef(navIds);
   navRef.current = navIds;
   useEffect(() => {
@@ -154,18 +222,22 @@ function IssuePage({ issue, navIds, routed }: { issue: Issue; navIds: string[]; 
 
   return (
     <>
-      <ViewHeader
-        crumbs={team ? [{
-          label: <span className="hidden sm:inline">{team.name}</span>,
-          icon: <TeamIcon team={team} size={16} />,
-          to: { kind: "team", key: team.key, tab: "all" },
-        }] : undefined}
-        title={key}
-        actions={<IssueHeaderActions issue={issue} issueKey={key} navIds={navIds} />}
-      />
+      {page ? (
+        <ViewHeader
+          crumbs={team ? [{
+            label: <span className="hidden sm:inline">{team.name}</span>,
+            icon: <TeamIcon team={team} size={16} />,
+            to: { kind: "team", key: team.key, tab: "all" },
+          }] : undefined}
+          title={key}
+          actions={<IssueHeaderActions issue={issue} issueKey={key} navIds={navIds} />}
+        />
+      ) : mode === "embedded" ? (
+        <EmbeddedHeader issue={issue} issueKey={key} team={team} />
+      ) : null}
       <div className="flex min-h-0 flex-1">
         <div ref={scrollRef} className="min-w-0 flex-1 overflow-y-auto">
-          <div className="mx-auto w-full max-w-[760px] px-4 pb-20 pt-5 sm:px-6 sm:pt-8">
+          <div className={`mx-auto w-full max-w-[760px] px-4 pb-20 pt-5 sm:px-6 ${page ? "sm:pt-8" : "sm:pt-6"}`}>
             {issue.archived_at && (
               <div className="mb-5 flex flex-wrap items-center gap-2 rounded-lg border border-line bg-raised px-3 py-2 text-[12.5px] text-dim">
                 <Archive size={14} className="shrink-0 text-faint" />
@@ -176,13 +248,13 @@ function IssuePage({ issue, navIds, routed }: { issue: Issue; navIds: string[]; 
               </div>
             )}
 
-            {/* embedded next to the inbox list, the property sidebar needs a much wider screen */}
-            <PropertyChips issue={issue} className={`mb-5 ${routed ? "lg:hidden" : "2xl:hidden"}`} />
+            {/* embedded next to another view's list, the property sidebar needs a much wider screen */}
+            <PropertyChips issue={issue} className={`mb-5 ${page ? "lg:hidden" : "2xl:hidden"}`} />
 
             {parent && (
               <a
                 {...linkProps({ kind: "issue", identifier: issueKey(parent, teams) })}
-                className="focus-ring mb-2.5 inline-flex h-8 max-w-full items-center gap-1.5 rounded-md border border-line bg-surface px-2 text-[12px] sm:h-7 text-dim transition-colors hover:bg-wash hover:text-ink"
+                className="focus-ring mb-2.5 inline-flex h-8 max-w-full items-center gap-1.5 rounded-md border border-line bg-surface px-2 text-[12px] text-dim transition-colors hover:bg-wash hover:text-ink sm:h-7"
               >
                 <span className="shrink-0 text-faint">Sub-issue of</span>
                 <StateGlyph stateId={parent.state_id} size={12} />
@@ -222,7 +294,7 @@ function IssuePage({ issue, navIds, routed }: { issue: Issue; navIds: string[]; 
         </div>
 
         <aside
-          className={`hidden w-[280px] shrink-0 overflow-y-auto border-l border-line bg-canvas ${routed ? "lg:block" : "2xl:block"}`}
+          className={`hidden w-[280px] shrink-0 overflow-y-auto border-l border-line bg-canvas ${page ? "lg:block" : "2xl:block"}`}
           aria-label="Issue properties"
         >
           <PropertiesSidebar issue={issue} />

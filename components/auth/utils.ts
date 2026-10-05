@@ -61,7 +61,7 @@ export function authErrorMessage(err: unknown): string {
     case "signup_disabled": return "New sign-ups are currently disabled.";
     case "email_provider_disabled": return "Email sign-in is disabled. Use another sign-in method.";
     case "email_address_invalid": return "Enter a valid email address.";
-    case "email_address_not_authorized": return "We can’t send email to this address yet. Try a different address.";
+    case "email_address_not_authorized": return "Email delivery isn’t set up for this app yet, so we can’t email this address. Log in with your password instead.";
     case "otp_expired": return "That link has expired. Request a new one.";
     case "flow_state_not_found":
     case "flow_state_expired":
@@ -69,8 +69,8 @@ export function authErrorMessage(err: unknown): string {
     case "session_not_found":
     case "session_expired":
     case "refresh_token_not_found": return "Your session has expired. Please start again.";
-    case "provider_disabled": return "Google sign-in isn’t enabled for this project yet.";
-    case "unexpected_audience": return "Google sign-in is misconfigured: this client ID isn’t authorized in Supabase.";
+    case "provider_disabled": return "This sign-in method isn’t enabled. Log in with your email and password.";
+    case "unexpected_audience": return "This sign-in method is misconfigured. Log in with your email and password.";
     case "user_banned": return "This account has been suspended.";
     case "captcha_failed": return "Captcha verification failed. Please try again.";
     case "reauthentication_needed": return "For security, log in again before changing your password.";

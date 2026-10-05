@@ -17,7 +17,6 @@ import { HealthDot, PriorityIcon, ProjectIcon } from "@/components/primitives/ic
 import { StateGlyph } from "@/components/pickers";
 import type { Health, Notification } from "@/lib/types";
 import { snoozePresets, snoozedUntilLabel, type InboxTab } from "./util";
-import PopFix from "./PopFix";
 
 const TYPE_ICON: Record<Notification["type"], ReactNode> = {
   assigned: <UserPlus size={9} strokeWidth={2.4} />,
@@ -168,8 +167,6 @@ function InboxRowImpl({
           )}
         >
           {(close) => (
-            <>
-            <PopFix />
             <ActionMenu
               onDone={close}
               items={[
@@ -187,7 +184,6 @@ function InboxRowImpl({
                 { id: "archive", divider: true, label: "Archive", icon: <Archive size={14} />, onSelect: () => onArchive(n.id) },
               ]}
             />
-            </>
           )}
         </Dropdown>
       </div>

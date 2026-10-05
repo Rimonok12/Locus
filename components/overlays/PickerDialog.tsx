@@ -1,13 +1,14 @@
 "use client";
 /* ─── Locus · keyboard property picker (S, P, A, L, ⇧P …) ─── */
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { ui, useUI, type PickerKind } from "@/lib/ui";
 import { useSync } from "@/lib/sync/store";
 import { issueKey } from "@/lib/model";
 import { Modal } from "@/components/primitives/overlay";
 import { Button } from "@/components/primitives/controls";
 import { IssuePicker, PICKER_TITLE, StateGlyph } from "@/components/pickers";
+import { useRestoreFocus } from "./useRestoreFocus";
 import type { Issue } from "@/lib/types";
 
 export default function PickerDialog() {
@@ -24,18 +25,28 @@ function PickerBody({ kind, issueIds }: { kind: PickerKind; issueIds: string[] }
   const teams = useSync((s) => s.teams);
   const list = issueIds.map((id) => issues[id]).filter(Boolean) as Issue[];
   const empty = list.length === 0;
+  const bodyRef = useRef<HTMLDivElement>(null);
+  useRestoreFocus();
 
   // every target vanished (deleted elsewhere) — nothing left to edit
   useEffect(() => {
     if (empty) ui.closePicker();
   }, [empty]);
+
+  // menus without a search box (due date) still take focus, so Enter / Space can't reach a row behind the dialog
+  useEffect(() => {
+    const el = bodyRef.current;
+    if (!el || el.contains(document.activeElement)) return;
+    el.querySelector<HTMLElement>("input:not([disabled]), button:not([disabled])")?.focus({ preventScroll: true });
+  }, [kind]);
+
   if (empty) return null;
 
   const single = list.length === 1 ? list[0] : undefined;
   const multi = kind === "labels";
 
   return (
-    <div className="flex flex-col">
+    <div ref={bodyRef} className="flex flex-col">
       <div className="flex min-w-0 items-center gap-2 px-3 pb-1 pt-3">
         <span className="shrink-0 text-xxs font-medium text-faint">{PICKER_TITLE[kind]}</span>
         <span className="inline-flex h-6 min-w-0 items-center gap-1.5 rounded-md bg-wash px-2 text-[12px] text-dim">

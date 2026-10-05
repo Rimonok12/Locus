@@ -54,7 +54,9 @@ function Composer({ project }: { project: Project }) {
     try { return window.localStorage.getItem(draftKey) ?? ""; } catch { return ""; }
   });
   const [body, setBody] = useState(initial);
-  const [health, setHealth] = useState<Health>(project.health ?? "on_track");
+  // follows the project's current health (incl. teammates' updates) until the author picks one
+  const [picked, setPicked] = useState<Health | null>(null);
+  const health: Health = picked ?? project.health ?? "on_track";
   const [editorKey, setEditorKey] = useState(0);
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
@@ -78,8 +80,9 @@ function Composer({ project }: { project: Project }) {
     setBody("");
     persistDraft("");
     setEditorKey((k) => k + 1);
-    // Project health is set by the database trigger on insert and streams back over realtime.
-    // Never write it from here: a second write could overwrite a newer update's health.
+    // postProjectUpdate mirrors the new health onto the project (the DB trigger sets it server-side);
+    // never write it from here — a second write could overwrite a newer update's health.
+    setPicked(null);
   };
   // the editor may keep the first onSubmit it receives — always call the latest post
   const postRef = useRef(post);
@@ -112,7 +115,7 @@ function Composer({ project }: { project: Project }) {
                 type="button"
                 role="radio"
                 aria-checked={active}
-                onClick={() => setHealth(h.value)}
+                onClick={() => setPicked(h.value)}
                 className={`focus-ring flex h-8 items-center gap-1.5 rounded-[5px] px-2 text-[12px] font-medium transition-colors sm:h-6 ${
                   active ? "bg-surface text-ink shadow-card" : "text-faint hover:text-dim"
                 }`}

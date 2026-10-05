@@ -13,7 +13,7 @@ import { SelectMenu } from "@/components/primitives/SelectMenu";
 import { StateIcon } from "@/components/primitives/icons";
 import { StateGlyph } from "@/components/pickers";
 import type { StateType, Team, WorkflowState } from "@/lib/types";
-import { ColorMenu, FOCUS, PopoverBody, TextField, plural, sameName } from "./kit";
+import { ColorMenu, TextField, plural, sameName } from "./kit";
 
 const TYPE_HINT: Record<StateType, string> = {
   backlog: "Ideas and issues not yet planned",
@@ -290,15 +290,13 @@ function DeleteStateForm({
             )}
           >
             {(close) => (
-              <PopoverBody focus={FOCUS.search}>
-                <SelectMenu
-                  items={options.map((s) => ({ id: s.id, label: s.name, icon: <StateGlyph stateId={s.id} />, hint: STATE_TYPE_LABEL[s.type], keywords: [s.type] }))}
-                  selected={target?.id ?? null}
-                  onSelect={(id) => { setPicked(id); close(); }}
-                  placeholder="Move issues to…"
-                  digitShortcuts={false}
-                />
-              </PopoverBody>
+              <SelectMenu
+                items={options.map((s) => ({ id: s.id, label: s.name, icon: <StateGlyph stateId={s.id} />, hint: STATE_TYPE_LABEL[s.type], keywords: [s.type] }))}
+                selected={target?.id ?? null}
+                onSelect={(id) => { setPicked(id); close(); }}
+                placeholder="Move issues to…"
+                digitShortcuts={false}
+              />
             )}
           </Dropdown>
         </div>

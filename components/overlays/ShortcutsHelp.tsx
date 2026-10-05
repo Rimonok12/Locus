@@ -7,6 +7,7 @@ import { ui, useUI } from "@/lib/ui";
 import { Modal } from "@/components/primitives/overlay";
 import { IconButton, Kbd } from "@/components/primitives/controls";
 import { keys } from "./commands";
+import { useRestoreFocus } from "./useRestoreFocus";
 
 interface Shortcut {
   label: string;
@@ -17,9 +18,13 @@ interface Shortcut {
 }
 interface Section { title: string; items: Shortcut[] }
 
+/* Every entry maps to a real handler: General / Navigation / Issue → useGlobalShortcuts,
+   Lists → issues/useListInteractions (+ issues/filters for F), Issue page → issue/IssueView,
+   Inbox → views/InboxView, Editor → editor/Editor (Tiptap StarterKit, task lists, mentions). */
 function buildSections(): Section[] {
   const mod = keys.mod();
   const shift = keys.shift();
+  const alt = keys.alt();
   const enter = keys.enter;
   const backspace = keys.backspace();
   const seq = (label: string, a: string, b: string, keywords?: string): Shortcut => ({ label, combos: [[a], [b]], then: true, keywords });
@@ -31,7 +36,7 @@ function buildSections(): Section[] {
         { label: "Create issue", combos: [["C"]], keywords: "new" },
         { label: "Search", combos: [["/"]], keywords: "find" },
         { label: "Keyboard shortcuts", combos: [["?"]], keywords: "help" },
-        { label: "Toggle sidebar", combos: [["["]], keywords: "navigation collapse" },
+        { label: "Toggle sidebar", combos: [["["]], keywords: "navigation collapse menu" },
       ],
     },
     {
@@ -51,13 +56,13 @@ function buildSections(): Section[] {
     {
       title: "Lists",
       items: [
-        { label: "Move down / up", combos: [["J"], ["K"]], keywords: "next previous arrow" },
-        { label: "Select issue", combos: [["X"]], keywords: "check" },
-        { label: "Extend selection", combos: [[shift, "J"], [shift, "K"]], keywords: "multi select" },
-        { label: "Open issue", combos: [[enter]] },
-        { label: "Peek issue", combos: [["Space"]], keywords: "preview" },
-        { label: "Filter", combos: [["F"]] },
+        { label: "Move down / up", combos: [["J"], ["K"]], keywords: "next previous arrow focus" },
+        { label: "Extend selection", combos: [[shift, "J"], [shift, "K"]], keywords: "multi select range" },
+        { label: "Select issue", combos: [["X"]], keywords: "check toggle" },
         { label: "Select all", combos: [[mod, "A"]] },
+        { label: "Open issue", combos: [[enter], ["O"]] },
+        { label: "Peek issue", combos: [["Space"]], keywords: "preview panel close" },
+        { label: "Filter", combos: [["F"]] },
         { label: "Clear selection / close peek", combos: [["Esc"]], keywords: "escape" },
       ],
     },
@@ -67,7 +72,7 @@ function buildSections(): Section[] {
         { label: "Change status", combos: [["S"]], keywords: "state" },
         { label: "Set priority", combos: [["P"]] },
         { label: "Assign to…", combos: [["A"]], keywords: "assignee" },
-        { label: "Assign to me", combos: [["I"]], keywords: "myself" },
+        { label: "Assign to me / unassign", combos: [["I"]], keywords: "myself" },
         { label: "Change labels", combos: [["L"]], keywords: "tag" },
         { label: "Add to project", combos: [[shift, "P"]] },
         { label: "Add to cycle", combos: [[shift, "C"]], keywords: "sprint" },
@@ -80,22 +85,49 @@ function buildSections(): Section[] {
       ],
     },
     {
+      title: "Issue page",
+      items: [
+        { label: "Next / previous issue", combos: [["J"], ["K"]], keywords: "navigate list" },
+        { label: "Go back", combos: [["Esc"]], keywords: "escape close list" },
+      ],
+    },
+    {
+      title: "Inbox",
+      items: [
+        { label: "Next / previous notification", combos: [["J"], ["K"]], keywords: "notifications" },
+        { label: "Open issue", combos: [[enter]], keywords: "notification" },
+        { label: "Archive notification", combos: [["E"], [backspace]], keywords: "done remove" },
+        { label: "Mark read / unread", combos: [["U"]], keywords: "notification" },
+        { label: "Snooze / unsnooze", combos: [["H"]], keywords: "remind later notification" },
+      ],
+    },
+    {
       title: "Editor",
       items: [
         { label: "Submit", combos: [[mod, enter]], keywords: "send save comment create" },
         { label: "Mention someone", combos: [["@"]], keywords: "user tag" },
         { label: "Bold", combos: [[mod, "B"]] },
         { label: "Italic", combos: [[mod, "I"]] },
+        { label: "Underline", combos: [[mod, "U"]] },
+        { label: "Strikethrough", combos: [[mod, shift, "S"]] },
         { label: "Inline code", combos: [[mod, "E"]], keywords: "markdown `code`" },
-        { label: "Heading", combos: [["#", "Space"]], keywords: "markdown title" },
+        { label: "Code block", combos: [["```", "Space"], [mod, alt, "C"]], keywords: "markdown pre" },
+        { label: "Heading", combos: [["#", "Space"]], keywords: "markdown title ## ###" },
         { label: "Bulleted list", combos: [["-", "Space"]], keywords: "markdown bullet" },
         { label: "Numbered list", combos: [["1.", "Space"]], keywords: "markdown ordered" },
+        { label: "Checklist", combos: [["[ ]", "Space"]], keywords: "markdown task todo checkbox" },
         { label: "Quote", combos: [[">", "Space"]], keywords: "markdown blockquote" },
-        { label: "Code block", combos: [["```"]], keywords: "markdown pre" },
+        { label: "Leave the editor", combos: [["Esc"]], keywords: "blur escape" },
       ],
     },
   ];
 }
+
+/** key glyphs also match their names ("cmd", "shift", "backspace"…) in the search box */
+const SPOKEN: Record<string, string> = {
+  "⌘": "⌘ cmd command", "⇧": "⇧ shift", "⌥": "⌥ alt option", "⌫": "⌫ backspace delete", "↵": "↵ enter return", Esc: "esc escape",
+};
+const spoken = (k: string) => SPOKEN[k] ?? k;
 
 export default function ShortcutsHelp() {
   const open = useUI((s) => s.shortcutsOpen);
@@ -108,6 +140,7 @@ export default function ShortcutsHelp() {
 
 function ShortcutsBody() {
   const [query, setQuery] = useState("");
+  useRestoreFocus();
   const sections = useMemo(buildSections, []);
   const q = query.trim().toLowerCase();
   const filtered = useMemo(() => {
@@ -117,7 +150,7 @@ function ShortcutsBody() {
       .map((s) => ({
         ...s,
         items: s.items.filter((it) => {
-          const hay = `${it.label} ${it.keywords ?? ""} ${s.title} ${it.combos.map((c) => c.join(" ")).join(" ")}`.toLowerCase();
+          const hay = `${it.label} ${it.keywords ?? ""} ${s.title} ${it.combos.map((c) => c.map(spoken).join(" ")).join(" ")}`.toLowerCase();
           return tokens.every((t) => hay.includes(t));
         }),
       }))

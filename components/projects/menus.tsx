@@ -104,14 +104,14 @@ export function TeamsMenu({ value, onChange }: { value: string[]; onChange: (ids
   );
 }
 
-/** Calendar + clear. */
+/** Calendar + clear. `min` / `max` (inclusive ISO dates) disable days outside the range. */
 export function DateMenu({
-  value, onChange, min, clearLabel = "Remove date",
-}: { value: string | null; onChange: (d: string | null) => void; min?: string | null; clearLabel?: string }) {
+  value, onChange, min, max, clearLabel = "Remove date",
+}: { value: string | null; onChange: (d: string | null) => void; min?: string | null; max?: string | null; clearLabel?: string }) {
   return (
     <div className="w-full">
       <div className="p-2">
-        <DatePicker value={value} onChange={onChange} min={min ?? undefined} />
+        <DatePicker value={value} onChange={onChange} min={min ?? undefined} max={max ?? undefined} />
       </div>
       {value && (
         <div className="border-t border-line p-1">
@@ -269,7 +269,14 @@ export function ProjectPropertyChips({
         empty={!value.start_date}
         width={256}
       >
-        {(close) => <DateMenu value={value.start_date} onChange={(d) => { onChange({ start_date: d }); close(); }} clearLabel="Remove start date" />}
+        {(close) => (
+          <DateMenu
+            value={value.start_date}
+            max={value.target_date}
+            onChange={(d) => { onChange({ start_date: d }); close(); }}
+            clearLabel="Remove start date"
+          />
+        )}
       </ChipDropdown>
 
       <ChipDropdown

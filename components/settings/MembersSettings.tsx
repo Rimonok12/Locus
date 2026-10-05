@@ -13,7 +13,7 @@ import { Button, Input, Textarea } from "@/components/primitives/controls";
 import { Dropdown } from "@/components/primitives/overlay";
 import { ActionMenu, type ActionItem } from "@/components/primitives/SelectMenu";
 import type { Profile, Role, WorkspaceInvite, WorkspaceMember } from "@/lib/types";
-import { Badge, Card, CopyButton, Count, FOCUS, PopoverBody, Section, SettingsPage, plural } from "./kit";
+import { Badge, Card, CopyButton, Count, Section, SettingsPage, plural } from "./kit";
 
 const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
@@ -79,50 +79,46 @@ function RolePicker({
       width={260}
       align="end"
       trigger={(p) => (
-        <button
+        <Button
           ref={p.ref}
           type="button"
+          variant={ghost ? "ghost" : "secondary"}
           onClick={p.onClick}
           aria-expanded={p["aria-expanded"]}
           aria-haspopup="menu"
           aria-label={`${label}: ${ROLE_LABEL[value]}`}
-          className={`focus-ring inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-[12.5px] font-medium transition-colors ${
-            ghost
-              ? `text-dim hover:bg-wash hover:text-ink ${p.open ? "bg-wash text-ink" : ""}`
-              : "border border-line-strong bg-surface text-ink shadow-card hover:bg-wash"
-          }`}
+          className={`h-8 ${ghost && p.open ? "bg-wash text-ink" : ""}`}
         >
           {ROLE_LABEL[value]}
           <ChevronDown size={12} className="text-faint" />
-        </button>
+        </Button>
       )}
     >
       {(close) => (
-        <PopoverBody focus="[aria-checked='true']">
-          <div className="p-1" role="menu">
-            {ROLES.map((r) => {
-              const reason = r.value !== value ? locked[r.value] : undefined;
-              const disabled = Boolean(reason);
-              return (
-                <button
-                  key={r.value}
-                  type="button"
-                  role="menuitemradio"
-                  aria-checked={value === r.value}
-                  disabled={disabled}
-                  onClick={() => { close(); if (r.value !== value) onChange(r.value); }}
-                  className="flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left outline-none transition-colors hover:bg-wash focus-visible:bg-wash disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
-                >
-                  <span className="mt-0.5 flex w-4 shrink-0 justify-center text-dim">{value === r.value && <Check size={14} />}</span>
-                  <span className="min-w-0">
-                    <span className="block text-[13px] text-ink">{r.label}</span>
-                    <span className="block text-xxs text-faint">{reason ?? r.description}</span>
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </PopoverBody>
+        <div className="p-1" role="menu">
+          {ROLES.map((r) => {
+            const reason = r.value !== value ? locked[r.value] : undefined;
+            const disabled = Boolean(reason);
+            return (
+              <button
+                key={r.value}
+                type="button"
+                role="menuitemradio"
+                aria-checked={value === r.value}
+                autoFocus={value === r.value}
+                disabled={disabled}
+                onClick={() => { close(); if (r.value !== value) onChange(r.value); }}
+                className="flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left outline-none transition-colors hover:bg-wash focus-visible:bg-wash disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
+              >
+                <span className="mt-0.5 flex w-4 shrink-0 justify-center text-dim">{value === r.value && <Check size={14} />}</span>
+                <span className="min-w-0">
+                  <span className="block text-[13px] text-ink">{r.label}</span>
+                  <span className="block text-xxs text-faint">{reason ?? r.description}</span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
       )}
     </Dropdown>
   );
@@ -330,12 +326,12 @@ function InviteLinkSection({ isAdmin, me }: { isAdmin: boolean; me: string }) {
             <>
               <div className="flex min-w-0 flex-1 items-center gap-2">
                 <Link2 size={14} className="shrink-0 text-faint" />
-                <input
+                <Input
                   readOnly
                   value={url ?? "Creating link…"}
                   aria-label="Invite link"
                   onFocus={(e) => e.currentTarget.select()}
-                  className="h-8 w-full min-w-0 truncate rounded-md border border-line bg-raised px-2.5 font-mono text-[12px] text-dim outline-none focus:border-accent focus:ring-2 focus:ring-accent-soft"
+                  className="h-8 min-w-0 truncate border-line bg-raised font-mono text-[12px] text-dim sm:text-[12px]"
                 />
               </div>
               <div className="flex shrink-0 items-center gap-2">
@@ -571,7 +567,7 @@ function MemberList({
                     </button>
                   )}
                 >
-                  {(close) => <PopoverBody focus={FOCUS.menu}><ActionMenu items={items} onDone={close} /></PopoverBody>}
+                  {(close) => <ActionMenu items={items} onDone={close} />}
                 </Dropdown>
               ) : (
                 <span className="w-8 shrink-0" aria-hidden />

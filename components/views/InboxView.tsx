@@ -2,16 +2,20 @@
 /* ─── Locus · Inbox: notifications list + selected item pane ─────────────────
    Keyboard (while no overlay is open and focus isn't in a text field):
      J / K  move · Enter open full page · E / Backspace archive · U read toggle
-     H snooze menu · Esc clear selection
+     H snooze menu (unsnooze on the Snoozed tab) · Esc clear selection
+   One bubble-phase window listener: anything inside the page that handles a
+   key first (fields, menus, inline forms) marks it defaultPrevented and wins;
+   Escape defers to the global handler by state (selection / peek / drawer),
+   not by listener order. Two panes from lg; narrower screens open full pages.
    ──────────────────────────────────────────────────────────────────────────── */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Archive, CheckCheck, Inbox, MoreHorizontal } from "lucide-react";
 import { useSync } from "@/lib/sync/store";
-import { toast, ui } from "@/lib/ui";
+import { toast, ui, useUI } from "@/lib/ui";
 import { navigate } from "@/lib/router";
 import {
-  archiveNotifications, markAllNotificationsRead, markNotificationsRead, snoozeNotifications,
+  archiveNotifications, markAllNotificationsRead, markNotificationsRead, snoozeNotifications, unsnoozeNotifications,
 } from "@/lib/sync/actions";
 import { HeaderTab, ViewHeader } from "@/components/app/Header";
 import { Button, EmptyState, IconButton, Tooltip } from "@/components/primitives/controls";
@@ -20,12 +24,14 @@ import { ActionMenu } from "@/components/primitives/SelectMenu";
 import InboxRow from "@/components/inbox/InboxRow";
 import InboxDetail from "@/components/inbox/InboxDetail";
 import SnoozeMenu from "@/components/inbox/SnoozeMenu";
-import PopFix from "@/components/inbox/PopFix";
 import { isSnoozed, routeForNotification, type InboxTab } from "@/components/inbox/util";
-import { isActivatable, isTypingTarget, overlayOpen, useIsDesktop, useNow } from "@/components/inbox/hooks";
+import { isActivatable, isTypingTarget, overlayOpen, useMediaQuery, useNow } from "@/components/inbox/hooks";
 import type { Notification } from "@/lib/types";
 
 const CHORD_MS = 1200;
+/** list + detail side by side; below this a notification opens its full page */
+const TWO_PANE = "(min-width: 1024px)";
+const plural = (n: number) => `${n} notification${n === 1 ? "" : "s"}`;
 
 export default function InboxView() {
   const me = useSync((s) => s.userId);
@@ -34,9 +40,10 @@ export default function InboxView() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   /** read during this visit — kept visible in the Unread tab so the selection doesn't vanish */
   const [kept, setKept] = useState<ReadonlySet<string>>(() => new Set());
+  /** open snooze menu, anchored to its row (hover action / H) */
   const [snooze, setSnooze] = useState<{ ids: string[]; anchor: HTMLElement } | null>(null);
   const now = useNow(30_000);
-  const desktop = useIsDesktop();
+  const desktop = useMediaQuery(TWO_PANE);
   const rowEls = useRef(new Map<string, HTMLDivElement>());
 
   const mine = useMemo(
@@ -86,8 +93,6 @@ export default function InboxView() {
     if (!id) return;
     setKept((k) => (k.has(id) ? k : new Set(k).add(id)));
     markNotificationsRead([id]);
-    const n = useSync.getState().notifications[id];
-    if (n?.issue_id) ui.setFocused(n.issue_id);
   }, []);
 
   /** When `ids` leave the current list, move the selection to the row that takes their place. */
@@ -101,22 +106,24 @@ export default function InboxView() {
     else setSelectedId(null);
   }, [select]);
 
-  const archive = useCallback(async (ids: string[]) => {
-    if (!ids.length) return;
+  /** Resolves true once the server accepted it (the rows drop then); failures revert and toast on their own. */
+  const archive = useCallback(async (ids: string[]): Promise<boolean> => {
+    if (!ids.length) return false;
     advancePast(ids);
-    await archiveNotifications(ids);
+    return archiveNotifications(ids);
   }, [advancePast]);
 
   const snoozeUntil = useCallback((ids: string[], until: Date) => {
     if (!ids.length) return;
     if (live.current.tab !== "snoozed") advancePast(ids);
-    snoozeNotifications(ids, until);
-    toast(`Snoozed until ${until.toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" })}`);
+    void snoozeNotifications(ids, until).then((ok) => {
+      if (ok) toast(`Snoozed until ${until.toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" })}`);
+    });
   }, [advancePast]);
 
   const unsnooze = useCallback((id: string) => {
     if (live.current.tab === "snoozed") advancePast([id]);
-    snoozeNotifications([id], new Date());
+    void unsnoozeNotifications([id]);
   }, [advancePast]);
 
   const toggleRead = useCallback((id: string) => {
@@ -152,8 +159,12 @@ export default function InboxView() {
     setKept(new Set());
   };
 
-  /* the embedded issue page offers prev/next through ui.visibleIds — never for a list that isn't on screen */
+  /* an issue page opened from here must not offer prev/next through some list that isn't on screen */
   useEffect(() => { ui.setVisibleIds([]); }, []);
+
+  /* global property shortcuts (S, P, A, L, I…) act on the selected notification's issue */
+  const focusIssueId = selected?.issue_id ?? null;
+  useEffect(() => { ui.setFocused(focusIssueId); }, [focusIssueId]);
 
   /* keep the selected row in view */
   useEffect(() => {
@@ -174,8 +185,9 @@ export default function InboxView() {
   useEffect(() => {
     let chordAt = 0;
     const onKey = (e: KeyboardEvent) => {
-      if (e.defaultPrevented || e.isComposing || e.metaKey || e.ctrlKey || e.altKey) return;
-      if (isTypingTarget(e.target) || overlayOpen()) { chordAt = 0; return; }
+      if (e.isComposing || e.metaKey || e.ctrlKey || e.altKey) return;
+      // claimed elsewhere (a field, a menu, the global "G then …" navigation) — that also ends any chord
+      if (e.defaultPrevented || isTypingTarget(e.target) || overlayOpen()) { chordAt = 0; return; }
       const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
       if (key === "g" && !e.shiftKey) { chordAt = Date.now(); return; }
       if (chordAt && Date.now() - chordAt < CHORD_MS) { chordAt = 0; return; } // second key of a "G then …" chord
@@ -185,7 +197,8 @@ export default function InboxView() {
       const { list: l, selectedId: sel, desktop: d, tab: t } = live.current;
       const idx = sel ? l.findIndex((n) => n.id === sel) : -1;
       const current = idx >= 0 ? l[idx] : undefined;
-      const handled = () => { e.preventDefault(); e.stopImmediatePropagation(); };
+      /** claim the key; one-shot actions don't repeat while it is held */
+      const handled = () => { e.preventDefault(); return !e.repeat; };
 
       switch (key) {
         case "j":
@@ -206,42 +219,41 @@ export default function InboxView() {
         }
         case "Enter": {
           if (!current || isActivatable(e.target)) return;
-          handled();
-          openFull(current);
+          if (handled()) openFull(current);
           return;
         }
         case "e":
         case "Backspace": {
           if (!current) return;
-          handled();
-          void archive([current.id]);
+          if (handled()) void archive([current.id]);
           return;
         }
         case "u": {
           if (!current) return;
-          handled();
-          toggleRead(current.id);
+          if (handled()) toggleRead(current.id);
           return;
         }
         case "h": {
           if (!current) return;
           const el = rowEls.current.get(current.id);
           if (!el) return;
-          handled();
+          if (!handled()) return;
           if (t === "snoozed") unsnooze(current.id);
           else setSnooze({ ids: [current.id], anchor: el });
           return;
         }
         case "Escape": {
-          if (!sel) return;
-          handled();
+          // a selection of issues, the peek panel and the drawer belong to the global handler (overlays
+          // were excluded above) — whichever listener runs first, only one of them acts on this press
+          if (!sel || useUI.getState().selected.length) return;
+          e.preventDefault();
           setSelectedId(null);
           return;
         }
       }
     };
-    window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
   }, [select, archive, toggleRead, openFull, unsnooze]);
 
   /* ─── header ─── */
@@ -280,8 +292,6 @@ export default function InboxView() {
             )}
           >
             {(close) => (
-              <>
-              <PopFix />
               <ActionMenu
                 onDone={close}
                 items={[
@@ -293,12 +303,7 @@ export default function InboxView() {
                     disabled: !readIds.length,
                     onSelect: () => {
                       const ids = readIds;
-                      void archive(ids).then(() => {
-                        // archiveNotifications drops the rows only once the server accepted the change
-                        if (!ids.some((id) => useSync.getState().notifications[id])) {
-                          toast(`Archived ${ids.length} notification${ids.length === 1 ? "" : "s"}`);
-                        }
-                      });
+                      void archive(ids).then((ok) => { if (ok) toast.success(`Archived ${plural(ids.length)}`); });
                     },
                   },
                   {
@@ -311,17 +316,18 @@ export default function InboxView() {
                     onSelect: () => {
                       const ids = visibleIds;
                       ui.askConfirm({
-                        title: `Archive ${ids.length} notification${ids.length === 1 ? "" : "s"}?`,
+                        title: `Archive ${plural(ids.length)}?`,
                         body: "Archived notifications are removed from your inbox.",
                         confirmLabel: "Archive",
                         destructive: true,
-                        onConfirm: () => archive(ids),
+                        onConfirm: async () => {
+                          if (await archive(ids)) toast.success(`Archived ${plural(ids.length)}`);
+                        },
                       });
                     },
                   },
                 ]}
               />
-              </>
             )}
           </Dropdown>
         </>
@@ -336,7 +342,7 @@ export default function InboxView() {
         <div
           role="listbox"
           aria-label="Notifications"
-          className="min-h-0 w-full overflow-y-auto md:w-[360px] md:shrink-0 md:border-r md:border-line"
+          className="min-h-0 w-full overflow-y-auto lg:w-[360px] lg:shrink-0 lg:border-r lg:border-line"
         >
           {list.length ? (
             list.map((n) => (
@@ -361,15 +367,17 @@ export default function InboxView() {
           )}
         </div>
 
-        <section aria-label="Notification details" className="hidden min-h-0 min-w-0 flex-1 flex-col md:flex">
-          {selected ? <InboxDetail key={selected.id} n={selected} /> : <NothingSelected hasItems={list.length > 0} />}
+        <section aria-label="Notification details" className="hidden min-h-0 min-w-0 flex-1 flex-col lg:flex">
+          {desktop && (selected ? (
+            <InboxDetail key={selected.id} n={selected} onArchive={onArchiveOne} />
+          ) : (
+            <NothingSelected hasItems={list.length > 0} />
+          ))}
         </section>
       </div>
 
       <Popover open={Boolean(snooze)} onClose={() => setSnooze(null)} anchor={snooze?.anchor ?? null} align="end" width={260}>
         {snooze && (
-          <>
-          <PopFix focus />
           <SnoozeMenu
             onPick={(until) => {
               const ids = snooze.ids;
@@ -377,7 +385,6 @@ export default function InboxView() {
               snoozeUntil(ids, until);
             }}
           />
-          </>
         )}
       </Popover>
     </>

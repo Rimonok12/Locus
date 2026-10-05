@@ -11,19 +11,13 @@ import { DatePicker } from "@/components/primitives/DatePicker";
 import { Button, Input } from "@/components/primitives/controls";
 import type { Cycle } from "@/lib/types";
 import { cycleTitle } from "./util";
-import PopFix from "@/components/inbox/PopFix";
 
 export default function CycleEditPopover({
   cycle, open, anchor, onClose,
 }: { cycle: Cycle; open: boolean; anchor: HTMLElement | null; onClose: () => void }) {
   return (
     <Popover open={open} onClose={onClose} anchor={anchor} align="end" width={300}>
-      {open && (
-        <>
-          <PopFix focus />
-          <CycleEditForm cycle={cycle} onClose={onClose} />
-        </>
-      )}
+      {open && <CycleEditForm cycle={cycle} onClose={onClose} />}
     </Popover>
   );
 }

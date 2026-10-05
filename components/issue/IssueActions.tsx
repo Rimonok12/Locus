@@ -1,5 +1,5 @@
 "use client";
-/* ─── Locus · issue page header actions: prev/next, subscribe, favorite, copy link, overflow menu ─── */
+/* ─── Locus · issue header actions (page, embedded pane, peek): prev/next, subscribe, favorite, copy link, overflow menu ─── */
 
 import {
   Archive, ArchiveRestore, Bell, BellOff, ChevronDown, ChevronUp, CopyPlus, GitBranch, Hash, Link2, MoreHorizontal,
@@ -65,15 +65,29 @@ function leaveToTeam(issue: Issue) {
   navigate(team ? { kind: "team", key: team.key, tab: "all" } : { kind: "my-issues", tab: "assigned" });
 }
 
-/** "…" menu. `context="peek"` closes the peek before deleting instead of leaving the page. */
-export function IssueMoreMenu({ issue, issueKey: key, context = "page" }: { issue: Issue; issueKey: string; context?: "page" | "peek" }) {
-  const items = useIssueMenu(issue, key, () => (context === "peek" ? ui.peek(null) : leaveToTeam(issue)));
+export type IssueActionsContext = "page" | "peek" | "embedded";
+
+/** Before deleting: the page leaves for the team list, the peek closes, an embedded pane stays (its parent drops the gone issue). */
+function beforeDeleteFor(context: IssueActionsContext, issue: Issue): () => void {
+  if (context === "peek") return () => ui.peek(null);
+  if (context === "embedded") return () => {};
+  return () => leaveToTeam(issue);
+}
+
+/** "…" menu. `context` decides what happens to the surrounding UI when the issue is deleted. */
+export function IssueMoreMenu({ issue, issueKey: key, context = "page", size = 32 }: {
+  issue: Issue;
+  issueKey: string;
+  context?: IssueActionsContext;
+  size?: number;
+}) {
+  const items = useIssueMenu(issue, key, beforeDeleteFor(context, issue));
   return (
     <Dropdown
       align="end"
       width={240}
       trigger={(p) => (
-        <IconButton ref={p.ref} label="More actions" size={32} active={p.open} onClick={p.onClick} aria-expanded={p["aria-expanded"]}>
+        <IconButton ref={p.ref} label="More actions" size={size} active={p.open} onClick={p.onClick} aria-expanded={p["aria-expanded"]}>
           <MoreHorizontal size={16} />
         </IconButton>
       )}
@@ -98,10 +112,21 @@ export function stepIssue(navIds: string[], currentId: string, delta: 1 | -1): b
   return false;
 }
 
-export function IssueHeaderActions({ issue, issueKey: key, navIds }: { issue: Issue; issueKey: string; navIds: string[] }) {
+/**
+ * Prev/next (page only), subscribe, favorite, copy link and the "…" menu.
+ * `context="embedded"`: compact 30px buttons for a pane bar, no prev/next, deleting keeps the pane.
+ */
+export function IssueHeaderActions({ issue, issueKey: key, navIds, context = "page" }: {
+  issue: Issue;
+  issueKey: string;
+  navIds: string[];
+  context?: Exclude<IssueActionsContext, "peek">;
+}) {
   const subscribed = useIsSubscribed(issue.id);
   const favorite = useIsFavorite(issue.id);
-  const index = navIds.indexOf(issue.id);
+  const embedded = context === "embedded";
+  const size = embedded ? 30 : 32;
+  const index = embedded ? -1 : navIds.indexOf(issue.id);
   const go = (delta: 1 | -1) => stepIssue(navIds, issue.id, delta);
 
   return (
@@ -122,7 +147,7 @@ export function IssueHeaderActions({ issue, issueKey: key, navIds }: { issue: Is
       )}
       <IconButton
         label={subscribed ? "Unsubscribe" : "Subscribe to updates"}
-        size={32}
+        size={size}
         active={subscribed}
         onClick={() => void (subscribed ? unsubscribe(issue.id) : subscribe(issue.id))}
         className="hidden sm:inline-flex"
@@ -131,16 +156,16 @@ export function IssueHeaderActions({ issue, issueKey: key, navIds }: { issue: Is
       </IconButton>
       <IconButton
         label={favorite ? "Remove from favorites" : "Add to favorites"}
-        size={32}
+        size={size}
         onClick={() => void toggleFavorite("issue", issue.id)}
         className="hidden sm:inline-flex"
       >
         <Star size={15} className={favorite ? "fill-current text-warning" : ""} />
       </IconButton>
-      <IconButton label="Copy link" size={32} onClick={() => copyText(issueUrl(issue), "Link copied")} className="hidden sm:inline-flex">
+      <IconButton label="Copy link" size={size} onClick={() => copyText(issueUrl(issue), "Link copied")} className="hidden sm:inline-flex">
         <Link2 size={15} />
       </IconButton>
-      <IssueMoreMenu issue={issue} issueKey={key} />
+      <IssueMoreMenu issue={issue} issueKey={key} context={context} size={size} />
     </>
   );
 }

@@ -23,8 +23,8 @@ import { Avatar } from "@/components/primitives/Avatar";
 import { PriorityIcon } from "@/components/primitives/icons";
 import { LabelPills, PropertyChip, StateGlyph } from "@/components/pickers";
 import {
-  AgeLabel, CycleChip, DueChip, EstimateChip, GroupIcon, MilestoneChip, ProjectChip, SubIssueChip, asSet, nudgeOpeningPopover,
-  statusGroupAllowed, type SubCounts,
+  AgeLabel, CycleChip, DueChip, EstimateChip, GroupIcon, MilestoneChip, ProjectChip, SubIssueChip, asSet, statusGroupAllowed,
+  type SubCounts,
 } from "./shared";
 import { useListInteractions, type MenuRequest } from "./useListInteractions";
 import type { DisplayOptions, Issue } from "@/lib/types";
@@ -224,11 +224,6 @@ export default function IssueList({
         aria-label="Issues"
         data-selecting={selecting}
         className="group/list relative min-h-0 flex-1 overflow-y-auto overscroll-contain pb-24"
-        onClickCapture={(e) => {
-          // a row property chip is opening its picker
-          const trigger = (e.target as HTMLElement).closest?.("[data-issue-id] button[aria-expanded='false']");
-          if (trigger && e.currentTarget.contains(trigger)) nudgeOpeningPopover();
-        }}
         {...handlers}
       >
         {sections}
@@ -264,9 +259,16 @@ function GroupHeader({
 
 /* ═══ row ═══ */
 
-/** static stand-in with the exact footprint of PropertyChip's icon variant */
+/**
+ * Static stand-in with the exact footprint of a row's PropertyChip (icon variant): 32px on phones and on
+ * touch screens (the row's hover:none override), 24px from sm with a pointer that can hover.
+ */
 function Slot({ children }: { children: ReactNode }) {
-  return <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-[5px] [@media(hover:none)]:h-8 [@media(hover:none)]:w-8">{children}</span>;
+  return (
+    <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[5px] [@media(min-width:640px)_and_(hover:hover)]:h-6 [@media(min-width:640px)_and_(hover:hover)]:w-6">
+      {children}
+    </span>
+  );
 }
 
 const IssueRow = memo(function IssueRow({

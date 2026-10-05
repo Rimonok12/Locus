@@ -15,8 +15,7 @@ import { ui, useUI } from "@/lib/ui";
 import { useSync } from "@/lib/sync/store";
 import { issueKey } from "@/lib/model";
 import { navigate } from "@/lib/router";
-import { anyOverlayOpen } from "@/components/primitives/overlay";
-import { isInteractiveTarget, isTypingTarget, sameIds } from "./shared";
+import { isInteractiveTarget, isTypingTarget, overlayActive, sameIds } from "./shared";
 
 export interface MenuRequest { id: string; x: number; y: number }
 
@@ -134,7 +133,9 @@ export function useListInteractions({
 
     const onKey = (e: KeyboardEvent) => {
       if (e.defaultPrevented || e.isComposing) return;
-      if (isTypingTarget(e.target) || anyOverlayOpen()) return;
+      // popovers/modals handle (and stop) their own Escape; anything layered — including the
+      // mobile nav drawer — keeps J/K/X/Space/Escape away from the list underneath
+      if (isTypingTarget(e.target) || overlayActive()) return;
       if (suspendedRef.current?.()) return;
       const list = idsRef.current;
       const s = useUI.getState();

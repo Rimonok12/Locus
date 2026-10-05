@@ -111,7 +111,7 @@ function LabelsChip({ issue }: { issue: Issue }) {
           onClick={p.onClick}
           aria-expanded={p["aria-expanded"]}
           title="Change labels"
-          className={`focus-ring inline-flex min-h-7 max-w-full items-center gap-1.5 rounded-md border border-line-strong px-2 text-[12.5px] transition-colors hover:bg-wash ${count ? "py-0.5 text-ink" : "text-dim"}`}
+          className={`focus-ring inline-flex min-h-8 max-w-full items-center gap-1.5 rounded-md border border-line-strong px-2 text-[12.5px] transition-colors hover:bg-wash sm:min-h-7 ${count ? "py-0.5 text-ink" : "text-dim"}`}
         >
           {count ? <LabelPills issue={issue} editable={false} max={3} /> : <><Tag size={13} className="text-faint" /> Labels</>}
         </button>
@@ -126,7 +126,7 @@ function LabelsChip({ issue }: { issue: Issue }) {
 export function PropertyChips({ issue, className = "" }: { issue: Issue; className?: string }) {
   const show = useVisibility(issue);
   return (
-    <div className={`flex flex-wrap items-center gap-1.5 [&_button]:min-h-8 sm:[&_button]:min-h-7 ${className}`}>
+    <div className={`flex flex-wrap items-center gap-1.5 ${className}`}>
       <PropertyChip issue={issue} kind="status" variant="chip" />
       <PropertyChip issue={issue} kind="priority" variant="chip" emptyLabel="Priority" />
       <PropertyChip issue={issue} kind="assignee" variant="chip" emptyLabel="Assignee" />

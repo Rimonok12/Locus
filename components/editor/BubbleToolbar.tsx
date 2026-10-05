@@ -6,6 +6,7 @@ import { isNodeSelection, useEditorState, type Editor } from "@tiptap/react";
 import { BubbleMenu } from "@tiptap/react/menus";
 import { Bold, Check, Code, Heading1, Heading2, Heading3, Italic, Link2, Strikethrough, Unlink } from "lucide-react";
 import { modKey } from "@/lib/format";
+import { EDITOR_UI_ATTR } from "./extensions";
 
 function normalizeUrl(raw: string): string {
   const v = raw.trim();
@@ -50,8 +51,10 @@ function Tool({ active, label, onClick, children }: { active?: boolean; label: s
   );
 }
 
-/* Memoized and fed stable props: every prop change makes BubbleMenu dispatch an options transaction. */
-export const BubbleToolbar = memo(function BubbleToolbar({ editor }: { editor: Editor }) {
+/* Memoized and fed stable props: every prop change makes BubbleMenu dispatch an options transaction.
+   `onLeave` runs when focus leaves the link field for somewhere outside the editor (the editor's own
+   blur skipped it because focus was moving into this toolbar). */
+export const BubbleToolbar = memo(function BubbleToolbar({ editor, onLeave }: { editor: Editor; onLeave?: (editor: Editor) => void }) {
   const [linkMode, setLinkMode] = useState(false);
   const [scrollTarget, setScrollTarget] = useState<HTMLElement | Window | null>(null);
   const [href, setHref] = useState("");
@@ -111,7 +114,7 @@ export const BubbleToolbar = memo(function BubbleToolbar({ editor }: { editor: E
       options={options}
       shouldShow={shouldShow}
     >
-      <div className="flex items-center gap-0.5 rounded-lg bg-surface p-1 shadow-pop">
+      <div {...{ [EDITOR_UI_ATTR]: "" }} className="flex items-center gap-0.5 rounded-lg bg-surface p-1 shadow-pop">
         {linkMode ? (
           <form
             className="flex items-center gap-1"
@@ -121,6 +124,11 @@ export const BubbleToolbar = memo(function BubbleToolbar({ editor }: { editor: E
               ref={inputRef}
               value={href}
               onChange={(e) => setHref(e.target.value)}
+              onBlur={(e) => {
+                const to = e.relatedTarget;
+                if (editor.isDestroyed || (to instanceof Node && (editor.view.dom.contains(to) || e.currentTarget.form?.contains(to)))) return;
+                onLeave?.(editor);
+              }}
               onKeyDown={(e) => {
                 if (e.key === "Escape") {
                   e.preventDefault();

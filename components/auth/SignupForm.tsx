@@ -1,5 +1,5 @@
 "use client";
-/* ─── Locus · sign up: name, email, password (+ Google) → onboarding ─── */
+/* ─── Locus · sign up: name, email, password → onboarding ─── */
 
 import { useRef, useState, type FormEvent } from "react";
 import { ArrowLeft, MailCheck } from "lucide-react";

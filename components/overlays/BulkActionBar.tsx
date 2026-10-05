@@ -4,7 +4,7 @@
 import { useEffect, type ReactNode } from "react";
 import {
   Archive, ArrowRightLeft, CalendarDays, Copy, Hexagon, Link2, ListTree, MoreHorizontal, RefreshCw, Tag, Trash2, Triangle,
-  UserRound, UserRoundCheck, X,
+  UserMinus, UserRound, UserRoundCheck, X,
 } from "lucide-react";
 import { ui, useUI, type PickerKind } from "@/lib/ui";
 import { useSync } from "@/lib/sync/store";
@@ -13,7 +13,7 @@ import { ActionMenu } from "@/components/primitives/SelectMenu";
 import { Kbd, Tooltip } from "@/components/primitives/controls";
 import { PriorityIcon, StateIcon } from "@/components/primitives/icons";
 import {
-  archiveTargets, confirmDeleteIssues, copyIssueIds, copyIssueLinks, keys, liveIds, toggleAssignToMe,
+  allAssignedToMe, archiveTargets, confirmDeleteIssues, copyIssueIds, copyIssueLinks, keys, liveIds, toggleAssignToMe,
 } from "./commands";
 
 /** ids of the selection that still exist, read at action time */
@@ -95,20 +95,26 @@ export default function BulkActionBar() {
             </Tooltip>
           )}
         >
-          {(close) => (
-            <ActionMenu
-              onDone={close}
-              items={[
-                { id: "assign-me", label: "Assign to me", icon: <UserRoundCheck size={14} />, hint: "I", onSelect: () => toggleAssignToMe(selection()) },
-                { id: "estimate", label: "Set estimate…", icon: <Triangle size={13} />, hint: `${shift}E`, onSelect: pick("estimate") },
-                { id: "due", label: "Set due date…", icon: <CalendarDays size={14} />, hint: `${shift}D`, onSelect: pick("due") },
-                { id: "team", label: "Move to team…", icon: <ArrowRightLeft size={14} />, hint: `${shift}M`, onSelect: pick("team") },
-                { id: "parent", label: "Set parent issue…", icon: <ListTree size={14} />, onSelect: pick("parent") },
-                { id: "copy-ids", divider: true, label: "Copy IDs", icon: <Copy size={14} />, hint: `${mod}.`, onSelect: () => copyIssueIds(selection()) },
-                { id: "copy-links", label: "Copy links", icon: <Link2 size={14} />, onSelect: () => copyIssueLinks(selection()) },
-              ]}
-            />
-          )}
+          {(close) => {
+            // read when the menu renders (it re-renders on open), so the toggle label matches the selection now
+            const mine = allAssignedToMe(selection());
+            return (
+              <ActionMenu
+                onDone={close}
+                items={[
+                  mine
+                    ? { id: "assign-me", label: "Unassign from me", icon: <UserMinus size={14} />, hint: "I", onSelect: () => toggleAssignToMe(selection()) }
+                    : { id: "assign-me", label: "Assign to me", icon: <UserRoundCheck size={14} />, hint: "I", onSelect: () => toggleAssignToMe(selection()) },
+                  { id: "estimate", label: "Set estimate…", icon: <Triangle size={13} />, hint: keys.combo(shift, "E"), onSelect: pick("estimate") },
+                  { id: "due", label: "Set due date…", icon: <CalendarDays size={14} />, hint: keys.combo(shift, "D"), onSelect: pick("due") },
+                  { id: "team", label: "Move to team…", icon: <ArrowRightLeft size={14} />, hint: keys.combo(shift, "M"), onSelect: pick("team") },
+                  { id: "parent", label: "Set parent issue…", icon: <ListTree size={14} />, onSelect: pick("parent") },
+                  { id: "copy-ids", divider: true, label: "Copy IDs", icon: <Copy size={14} />, hint: keys.combo(mod, "."), onSelect: () => copyIssueIds(selection()) },
+                  { id: "copy-links", label: "Copy links", icon: <Link2 size={14} />, hint: keys.combo(mod, shift, ","), onSelect: () => copyIssueLinks(selection()) },
+                ]}
+              />
+            );
+          }}
         </Dropdown>
       </div>
     </div>

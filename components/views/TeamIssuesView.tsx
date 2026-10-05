@@ -13,25 +13,15 @@ import NotFound from "@/components/app/NotFound";
 import { Button, EmptyState } from "@/components/primitives/controls";
 import { TeamIcon } from "@/components/primitives/icons";
 import IssuesSurface, { DisplayMenu, FilterBar, FilterButton } from "@/components/issues/IssuesSurface";
+import { TEAM_TAB_FILTERS } from "@/components/issues/filters";
 import { ToolbarButton } from "@/components/issues/shared";
-import type { Filter, Issue, Team } from "@/lib/types";
+import type { Issue, Team } from "@/lib/types";
 
 const TABS: { tab: TeamTab; label: string }[] = [
   { tab: "all", label: "All issues" },
   { tab: "active", label: "Active" },
   { tab: "backlog", label: "Backlog" },
 ];
-
-/**
- * The Active / Backlog scopes are expressed as base filters (not hidden in the scope
- * predicate) so the board can drop status columns that can never fill, and "Save view"
- * keeps the tab's scope. Base filters never show in the filter bar.
- */
-const TAB_FILTERS: Record<TeamTab, Filter[] | undefined> = {
-  all: undefined,
-  active: [{ id: "tab-active", field: "state_type", op: "is", values: ["unstarted", "started"] }],
-  backlog: [{ id: "tab-backlog", field: "state_type", op: "is", values: ["backlog"] }],
-};
 
 export default function TeamIssuesView({ teamKey, tab }: { teamKey: string; tab: "all" | "active" | "backlog" }) {
   const team = useTeamByKey(teamKey);
@@ -42,7 +32,10 @@ export default function TeamIssuesView({ teamKey, tab }: { teamKey: string; tab:
 function TeamIssues({ team, tab }: { team: Team; tab: TeamTab }) {
   const viewKey = `team:${team.id}:${tab}`;
   const scope = useCallback((i: Issue) => i.team_id === team.id, [team.id]);
-  const query = useIssueQuery({ viewKey, scope, teamId: team.id, baseFilters: TAB_FILTERS[tab], deps: [team.id] });
+  // the Active / Backlog scopes are base filters (not hidden in the scope predicate) so the board
+  // drops status columns that can never fill; "Save view" re-derives them from the view key.
+  // Base filters never show in the filter bar.
+  const query = useIssueQuery({ viewKey, scope, teamId: team.id, baseFilters: TEAM_TAB_FILTERS[tab], deps: [team.id] });
 
   const favorite = useSync((s) => {
     for (const f of Object.values(s.favorites)) if (f.kind === "team" && f.target_id === team.id && f.user_id === s.userId) return true;

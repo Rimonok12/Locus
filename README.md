@@ -7,7 +7,7 @@
 ## Features
 
 - **Accounts & workspaces**
-  - Sign in with email + password, a magic link or Google.
+  - Sign in with email + password (magic-link sign-in turns on once custom SMTP is configured).
   - Multiple workspaces per user, with invite links (open or email-bound) and admin/member roles.
 - **Teams**
   - Per-team issue identifiers (`ENG-123`) and a customizable workflow (Backlog → Todo → In Progress → In Review → Done → Canceled).
@@ -43,7 +43,7 @@
 |---|---|
 | Framework | Next.js 14 (App Router) + React 18, TypeScript strict |
 | Data | Supabase Postgres with row-level security on every table, triggers and RPCs |
-| Auth | Supabase Auth via `@supabase/ssr` (cookie sessions, middleware refresh); Google Identity Services |
+| Auth | Supabase Auth via `@supabase/ssr` (cookie sessions, middleware refresh) |
 | Realtime | Supabase Realtime `postgres_changes` → client sync engine (zustand) |
 | Editor | Tiptap v3 |
 | Drag & drop | dnd-kit |
@@ -77,7 +77,7 @@ Supabase Auth settings:
 - **Site URL:** your deployment's origin.
 - **Redirect URLs:** `http://localhost:3456/**` and `https://<your-domain>/**`.
 
-For Google sign-in, create a Google OAuth **Web client ID**. Add it to Supabase → Auth → Providers → Google (authorized client IDs), and set `NEXT_PUBLIC_GOOGLE_CLIENT_ID`.
+Turn off **Confirm email** for instant sign-up. Supabase's built-in mailer only delivers to your own project team. For magic links and password-reset emails to everyone, configure custom SMTP and set `NEXT_PUBLIC_AUTH_EMAILS=on`.
 
 ## Scripts
 

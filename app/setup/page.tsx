@@ -16,8 +16,8 @@ const ENV_SNIPPET = `# Supabase project → Settings → API
 NEXT_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=<anon-or-publishable-key>
 
-# Optional: Google sign-in (Google Identity Services web client ID)
-NEXT_PUBLIC_GOOGLE_CLIENT_ID=
+# Optional: set to "on" once custom SMTP is configured in Supabase (enables magic-link sign-in)
+NEXT_PUBLIC_AUTH_EMAILS=
 
 # Optional: canonical origin for auth email redirects
 NEXT_PUBLIC_SITE_URL=
@@ -60,7 +60,7 @@ export default function SetupPage() {
   const vars = [
     { name: "NEXT_PUBLIC_SUPABASE_URL", required: true, set: Boolean(SUPABASE_URL), note: "Your project URL." },
     { name: "NEXT_PUBLIC_SUPABASE_ANON_KEY", required: true, set: Boolean(SUPABASE_ANON_KEY), note: "The anon (or publishable) API key." },
-    { name: "NEXT_PUBLIC_GOOGLE_CLIENT_ID", required: false, set: Boolean(process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID), note: "Enables “Continue with Google”." },
+    { name: "NEXT_PUBLIC_AUTH_EMAILS", required: false, set: process.env.NEXT_PUBLIC_AUTH_EMAILS === "on", note: "“on” once custom SMTP is set up — enables magic-link sign-in." },
     { name: "NEXT_PUBLIC_SITE_URL", required: false, set: Boolean(process.env.NEXT_PUBLIC_SITE_URL), note: "Production origin, e.g. https://locus.example.com." },
   ];
 
@@ -142,7 +142,8 @@ export default function SetupPage() {
           <Step n={4} title="Configure authentication">
             In <span className="font-medium text-ink">Authentication → URL configuration</span>, set the Site URL to your
             deployment’s origin and add <Mono>http://localhost:3456/**</Mono> and <Mono>https://&lt;your-domain&gt;/**</Mono> as
-            redirect URLs. For Google sign-in, enable the Google provider and add your web client ID to its authorized client IDs.
+            redirect URLs. Turn off <span className="font-medium text-ink">Confirm email</span> for instant sign-up, or configure custom SMTP
+            first — Supabase’s built-in mailer only delivers to your own project team.
           </Step>
 
           <Step n={5} title="Restart or redeploy">

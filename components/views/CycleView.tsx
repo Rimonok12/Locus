@@ -16,11 +16,9 @@ import { ActionMenu } from "@/components/primitives/SelectMenu";
 import { TeamIcon } from "@/components/primitives/icons";
 import { ui } from "@/lib/ui";
 import CycleSummary from "@/components/cycles/CycleSummary";
-import PopFix from "@/components/inbox/PopFix";
 import CycleEditPopover from "@/components/cycles/CycleEditPopover";
 import CompleteCycleModal from "@/components/cycles/CompleteCycleModal";
 import { EnableCyclesButton } from "@/components/cycles/EnableCycles";
-import { HIDE_SAVE_VIEW } from "@/components/saved-views/viewActions";
 import { EMPTY_ISSUES, confirmDeleteCycle, cycleRange, cycleTiming, cycleTitle, useIssuesByCycle } from "@/components/cycles/util";
 import type { Crumb } from "@/components/app/Header";
 import type { Cycle, Issue, Team } from "@/lib/types";
@@ -129,8 +127,6 @@ function CycleDetail({ team, cycle }: { team: Team; cycle: Cycle }) {
   const title = cycleTitle(cycle);
 
   const menu = (close: () => void) => (
-    <>
-    <PopFix />
     <ActionMenu
       onDone={close}
       items={[
@@ -146,7 +142,6 @@ function CycleDetail({ team, cycle }: { team: Team; cycle: Cycle }) {
         },
       ]}
     />
-    </>
   );
 
   return (
@@ -163,30 +158,31 @@ function CycleDetail({ team, cycle }: { team: Team; cycle: Cycle }) {
             </span>
             <FilterButton viewKey={viewKey} teamId={team.id} />
             <DisplayMenu viewKey={viewKey} query={query} />
+            {/* the edit popover anchors here once the menu that opened it has closed */}
             <span ref={moreRef} className="inline-flex">
-            <Dropdown
-              align="end"
-              width={220}
-              trigger={(p) => (
-                <IconButton
-                  ref={p.ref}
-                  onClick={p.onClick}
-                  aria-expanded={p["aria-expanded"]}
-                  active={p.open || editing}
-                  size={30}
-                  label="Cycle actions"
-                  className="max-md:!h-8 max-md:!w-8"
-                >
-                  <MoreHorizontal size={15} />
-                </IconButton>
-              )}
-            >
-              {menu}
-            </Dropdown>
+              <Dropdown
+                align="end"
+                width={220}
+                trigger={(p) => (
+                  <IconButton
+                    ref={p.ref}
+                    onClick={p.onClick}
+                    aria-expanded={p["aria-expanded"]}
+                    active={p.open || editing}
+                    size={30}
+                    label="Cycle actions"
+                    className="max-md:!h-8 max-md:!w-8"
+                  >
+                    <MoreHorizontal size={15} />
+                  </IconButton>
+                )}
+              >
+                {menu}
+              </Dropdown>
             </span>
           </>
         }
-        sub={<div className={HIDE_SAVE_VIEW}><FilterBar viewKey={viewKey} query={query} /></div>}
+        sub={<FilterBar viewKey={viewKey} query={query} />}
       />
 
       <CycleSummary cycle={cycle} issues={cycleIssues} />

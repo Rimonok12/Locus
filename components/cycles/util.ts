@@ -15,18 +15,28 @@ export const cycleTitle = (c: Pick<Cycle, "name" | "number">) =>
 
 export const cycleRange = (c: Pick<Cycle, "starts_at" | "ends_at">) => `${formatDate(c.starts_at)} → ${formatDate(c.ends_at)}`;
 
-/** "6 days left" · "Ends today" · "Starts in 3 days" · "Completed Oct 4" · "Ended Oct 4" */
+/** The viewer's local calendar day (YYYY-MM-DD) of a timestamp — the same calendar todayISO() uses. */
+export function localDayOf(timestamp: string): string {
+  const d = new Date(timestamp);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/**
+ * "6 days left" · "Ends today" · "Starts tomorrow" · "Completed Oct 4" · "Ended Oct 4".
+ * `ends_at` is exclusive (the next cycle starts on it), so a running cycle always has at least one day
+ * left, today included; phase and count come from the same local `today`.
+ */
 export function cycleTiming(c: Cycle, today = todayISO()): string {
   const phase = cyclePhase(c, today);
   if (phase === "current") {
     const n = daysBetween(today, c.ends_at);
-    return n <= 0 ? "Ends today" : n === 1 ? "1 day left" : `${n} days left`;
+    return n <= 1 ? "Ends today" : `${n} days left`;
   }
   if (phase === "upcoming") {
     const n = daysBetween(today, c.starts_at);
     return n <= 1 ? "Starts tomorrow" : `Starts in ${n} days`;
   }
-  return c.completed_at ? `Completed ${formatDate(c.completed_at.slice(0, 10))}` : `Ended ${formatDate(c.ends_at)}`;
+  return c.completed_at ? `Completed ${formatDate(localDayOf(c.completed_at))}` : `Ended ${formatDate(c.ends_at)}`;
 }
 
 /** Non-archived issues per cycle id. */

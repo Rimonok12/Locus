@@ -1,13 +1,13 @@
 "use client";
 /* ─── Locus · display options popover: layout, grouping, ordering, completed window, properties ─── */
 
-import { useRef, useState, type ReactNode } from "react";
+import { type KeyboardEvent, type ReactNode } from "react";
 import { ChevronDown, Columns3, LayoutList, RotateCcw, SlidersHorizontal } from "lucide-react";
 import { ui, useUI } from "@/lib/ui";
 import { PROPERTY_LABEL, type IssueQuery } from "@/lib/model";
 import { Dropdown } from "@/components/primitives/overlay";
 import { Switch } from "@/components/primitives/controls";
-import { ToolbarButton, usePopoverFix } from "./shared";
+import { ToolbarButton } from "./shared";
 import type { CompletedWindow, DisplayOptions, DisplayProperty, Grouping, Ordering } from "@/lib/types";
 
 const GROUPINGS: { value: Grouping; label: string }[] = [
@@ -47,14 +47,10 @@ const LAYOUTS: { value: DisplayOptions["layout"]; label: string; icon: ReactNode
 ];
 
 export function DisplayMenu({ viewKey, query, groupings }: { viewKey: string; query: IssueQuery; groupings?: Grouping[] }) {
-  const [open, setOpen] = useState(false);
-  const panelRef = useRef<HTMLDivElement>(null);
-  usePopoverFix(open, panelRef);
   return (
     <Dropdown
       width={320}
       align="end"
-      onOpenChange={setOpen}
       trigger={(p) => (
         <ToolbarButton
           ref={p.ref}
@@ -68,11 +64,7 @@ export function DisplayMenu({ viewKey, query, groupings }: { viewKey: string; qu
         />
       )}
     >
-      {() => (
-        <div ref={panelRef}>
-          <DisplayPanel viewKey={viewKey} display={query.display} groupings={groupings} />
-        </div>
-      )}
+      {() => <DisplayPanel viewKey={viewKey} display={query.display} groupings={groupings} />}
     </Dropdown>
   );
 }
@@ -82,9 +74,20 @@ function DisplayPanel({ viewKey, display, groupings }: { viewKey: string; displa
   const set = (patch: Partial<DisplayOptions>) => ui.setDisplay(viewKey, patch);
   const groupingOptions = GROUPINGS.filter((g) => !groupings || groupings.includes(g.value) || g.value === display.grouping);
 
+  // radio-group keys: arrows switch the layout and carry focus along (the checked radio is the tab stop)
+  const onLayoutKey = (e: KeyboardEvent<HTMLDivElement>) => {
+    const dir = e.key === "ArrowRight" || e.key === "ArrowDown" ? 1 : e.key === "ArrowLeft" || e.key === "ArrowUp" ? -1 : 0;
+    if (!dir) return;
+    e.preventDefault();
+    const i = LAYOUTS.findIndex((l) => l.value === display.layout);
+    const next = LAYOUTS[(i + dir + LAYOUTS.length) % LAYOUTS.length];
+    set({ layout: next.value });
+    e.currentTarget.querySelector<HTMLElement>(`[data-layout="${next.value}"]`)?.focus();
+  };
+
   return (
     <div className="max-h-[min(80vh,560px)] overflow-y-auto text-[13px]">
-      <div role="radiogroup" aria-label="Layout" className="grid grid-cols-2 gap-1.5 border-b border-line p-2.5">
+      <div role="radiogroup" aria-label="Layout" onKeyDown={onLayoutKey} className="grid grid-cols-2 gap-1.5 border-b border-line p-2.5">
         {LAYOUTS.map((l) => {
           const on = display.layout === l.value;
           return (
@@ -93,6 +96,10 @@ function DisplayPanel({ viewKey, display, groupings }: { viewKey: string; displa
               type="button"
               role="radio"
               aria-checked={on}
+              data-layout={l.value}
+              tabIndex={on ? 0 : -1}
+              // the panel is portaled: start keyboard focus inside it so Tab walks its controls
+              autoFocus={on}
               onClick={() => set({ layout: l.value })}
               className={`focus-ring flex h-14 flex-col items-center justify-center gap-1 rounded-md border text-[12.5px] font-medium transition-colors ${
                 on ? "border-line-strong bg-wash text-ink" : "border-line text-faint hover:border-line-strong hover:text-dim"

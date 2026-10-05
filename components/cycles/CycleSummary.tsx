@@ -4,9 +4,9 @@
 import { useMemo, useState } from "react";
 import { ChevronRight } from "lucide-react";
 import { useSync } from "@/lib/sync/store";
-import { STATE_TYPE_COLOR, progressOf } from "@/lib/model";
+import { STATE_TYPE_COLOR, progressOf, todayISO } from "@/lib/model";
 import { ProgressBar } from "@/components/primitives/controls";
-import { readPref, writePref } from "@/components/inbox/hooks";
+import { readPref, useNow, writePref } from "@/components/inbox/hooks";
 import type { Cycle, Issue } from "@/lib/types";
 import BurnupChart from "./BurnupChart";
 import { cycleRange, cycleStats, cycleTiming, pct } from "./util";
@@ -20,6 +20,9 @@ export default function CycleSummary({ cycle, issues }: { cycle: Cycle; issues: 
   const [open, setOpen] = useState(() => readPref<boolean>(PREF, typeof window !== "undefined" && window.innerWidth >= 768));
   const toggle = () => setOpen((v) => { writePref(PREF, !v); return !v; });
   const percent = Math.round(progress.ratio * 100);
+  // one local "today" for the days-left label and the chart's marker; the tick rolls both over at midnight
+  useNow(5 * 60_000);
+  const today = todayISO();
 
   return (
     <section className="shrink-0 border-b border-line bg-canvas">
@@ -32,7 +35,7 @@ export default function CycleSummary({ cycle, issues }: { cycle: Cycle; issues: 
         <ChevronRight size={14} className={`shrink-0 text-faint transition-transform ${open ? "rotate-90" : ""}`} />
         <span className="min-w-0 truncate text-[12.5px] tabular-nums text-dim">{cycleRange(cycle)}</span>
         <span className="text-faint">·</span>
-        <span className="shrink-0 text-[12.5px] text-ink">{cycleTiming(cycle)}</span>
+        <span className="shrink-0 text-[12.5px] text-ink">{cycleTiming(cycle, today)}</span>
         <span className="ml-auto flex shrink-0 items-center gap-2.5">
           <ProgressBar value={progress.ratio} className="hidden w-28 sm:block md:w-40" />
           <span className="text-[12.5px] tabular-nums text-dim">{percent}%</span>
@@ -47,7 +50,7 @@ export default function CycleSummary({ cycle, issues }: { cycle: Cycle; issues: 
             <Stat color="var(--accent)" label="Completed" count={stats.doneCount} pts={stats.donePts} percent={pct(stats.donePts, stats.scope)} />
           </div>
           <div className="min-w-0 rounded-lg border border-line bg-surface px-3 pb-2.5 pt-3 shadow-card">
-            <BurnupChart cycle={cycle} issues={issues} />
+            <BurnupChart cycle={cycle} issues={issues} today={today} />
           </div>
         </div>
       )}

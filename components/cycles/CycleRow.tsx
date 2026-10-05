@@ -4,7 +4,7 @@
 import { memo, useMemo, useRef, useState } from "react";
 import { ArrowUpRight, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { useSync } from "@/lib/sync/store";
-import { cyclePhase, progressOf } from "@/lib/model";
+import { cyclePhase, progressOf, todayISO } from "@/lib/model";
 import { linkProps, navigate, type Route } from "@/lib/router";
 import { IconButton } from "@/components/primitives/controls";
 import { Dropdown } from "@/components/primitives/overlay";
@@ -12,7 +12,6 @@ import { ActionMenu } from "@/components/primitives/SelectMenu";
 import { ProgressRing } from "@/components/primitives/icons";
 import type { Cycle, Issue, Team } from "@/lib/types";
 import CycleEditPopover from "./CycleEditPopover";
-import PopFix from "@/components/inbox/PopFix";
 import { confirmDeleteCycle, cycleRange, cycleTiming, cycleTitle } from "./util";
 
 function CycleRowImpl({ cycle, team, issues }: { cycle: Cycle; team: Team; issues: Issue[]; /** clock tick */ tick?: number }) {
@@ -21,7 +20,8 @@ function CycleRowImpl({ cycle, team, issues }: { cycle: Cycle; team: Team; issue
   const [menuOpen, setMenuOpen] = useState(false);
   const moreRef = useRef<HTMLDivElement>(null);
 
-  const phase = cyclePhase(cycle);
+  const today = todayISO(); // re-read on every clock tick from the list
+  const phase = cyclePhase(cycle, today);
   const progress = useMemo(() => progressOf(issues, states), [issues, states]);
   const percent = Math.round(progress.ratio * 100);
   const title = cycleTitle(cycle);
@@ -47,7 +47,7 @@ function CycleRowImpl({ cycle, team, issues }: { cycle: Cycle; team: Team; issue
         <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[12px] text-faint md:mt-0 md:text-[12.5px]">
           <span className="truncate tabular-nums text-dim">{cycleRange(cycle)}</span>
           <span>·</span>
-          <span className={`truncate ${phase === "current" ? "text-ink" : ""}`}>{cycleTiming(cycle)}</span>
+          <span className={`truncate ${phase === "current" ? "text-ink" : ""}`}>{cycleTiming(cycle, today)}</span>
         </div>
       </div>
 
@@ -77,17 +77,14 @@ function CycleRowImpl({ cycle, team, issues }: { cycle: Cycle; team: Team; issue
           )}
         >
           {(close) => (
-            <>
-              <PopFix />
-              <ActionMenu
-                onDone={close}
-                items={[
-                  ...(to ? [{ id: "open", label: "Open cycle", icon: <ArrowUpRight size={14} />, onSelect: () => navigate(to) }] : []),
-                  { id: "edit", label: "Edit name & dates", icon: <Pencil size={14} />, onSelect: () => setEditing(true) },
-                  { id: "delete", label: "Delete cycle", icon: <Trash2 size={14} />, danger: true, divider: true, onSelect: () => confirmDeleteCycle(cycle, issues.length) },
-                ]}
-              />
-            </>
+            <ActionMenu
+              onDone={close}
+              items={[
+                ...(to ? [{ id: "open", label: "Open cycle", icon: <ArrowUpRight size={14} />, onSelect: () => navigate(to) }] : []),
+                { id: "edit", label: "Edit name & dates", icon: <Pencil size={14} />, onSelect: () => setEditing(true) },
+                { id: "delete", label: "Delete cycle", icon: <Trash2 size={14} />, danger: true, divider: true, onSelect: () => confirmDeleteCycle(cycle, issues.length) },
+              ]}
+            />
           )}
         </Dropdown>
       </div>

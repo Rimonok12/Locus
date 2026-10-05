@@ -6,8 +6,8 @@ import { Activity, Bell, Plus, Target } from "lucide-react";
 import { useSync } from "@/lib/sync/store";
 import { ui, useUI } from "@/lib/ui";
 import { linkProps, navigate, type MyIssuesTab } from "@/lib/router";
-import { issueKey, useIssueQuery, useMeId, useMyTeams } from "@/lib/model";
-import { daysBetween, localToday, timeAgo } from "@/lib/format";
+import { issueKey, todayISO, useIssueQuery, useMeId, useMyTeams } from "@/lib/model";
+import { daysBetween, timeAgo } from "@/lib/format";
 import { HeaderTab, ViewHeader } from "@/components/app/Header";
 import IssuesSurface, { DisplayMenu, FilterBar, FilterButton } from "@/components/issues/IssuesSurface";
 import { Button, EmptyState } from "@/components/primitives/controls";
@@ -15,7 +15,6 @@ import { Avatar } from "@/components/primitives/Avatar";
 import { TeamIcon } from "@/components/primitives/icons";
 import { StateGlyph } from "@/components/pickers";
 import { isActivatable, isTypingTarget, overlayOpen, useNow } from "@/components/inbox/hooks";
-import { HIDE_SAVE_VIEW } from "@/components/saved-views/viewActions";
 import type { Issue } from "@/lib/types";
 
 const TABS: { value: MyIssuesTab; label: string }[] = [
@@ -91,7 +90,7 @@ function MyIssueList({ tab }: { tab: Exclude<MyIssuesTab, "activity"> }) {
             <DisplayMenu viewKey={viewKey} query={query} />
           </>
         }
-        sub={<div className={HIDE_SAVE_VIEW}><FilterBar viewKey={viewKey} query={query} /></div>}
+        sub={<FilterBar viewKey={viewKey} query={query} />}
       />
       <IssuesSurface query={query} viewKey={viewKey} createDefaults={createDefaults} empty={<ListEmpty tab={tab} createDefaults={createDefaults} />} />
     </>
@@ -168,7 +167,7 @@ function MyActivity() {
   );
 
   const groups = useMemo(() => {
-    const today = localToday();
+    const today = todayISO();
     const out: { label: string; issues: Issue[] }[] = [];
     for (const i of list) {
       const label = bucketOf(i.updated_at, today);

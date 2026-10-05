@@ -1,5 +1,5 @@
 "use client";
-/* ─── Locus · log in: email + password, magic link, Google ─── */
+/* ─── Locus · log in: email + password (magic link when auth emails are enabled) ─── */
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ArrowLeft, KeyRound, Mail, MailCheck } from "lucide-react";
@@ -7,6 +7,7 @@ import { supabase } from "@/lib/supabase/client";
 import { Button } from "@/components/primitives/controls";
 import { AuthCard, AuthDivider, AuthIcon, AuthLink, FormAlert } from "./AuthCard";
 import { GoogleButton, googleEnabled } from "./GoogleButton";
+import { authEmailsEnabled } from "@/lib/env";
 import { PasswordField, TextField, useCooldown, useDeferredFocus } from "./fields";
 import { EMAIL_RE, authErrorMessage, callbackUrl, withNext } from "./utils";
 
@@ -295,14 +296,16 @@ export default function LoginForm({ next, initialError }: { next: string | null;
         </Button>
       </form>
 
-      <button
-        type="button"
-        onClick={() => switchMode(mode === "password" ? "magic" : "password")}
-        disabled={busy}
-        className="focus-ring mt-3 flex h-9 w-full items-center justify-center gap-2 rounded-lg text-[13px] font-medium text-dim transition-colors hover:bg-wash hover:text-ink disabled:opacity-50"
-      >
-        {mode === "password" ? <><Mail size={14} /> Email me a magic link instead</> : <><KeyRound size={14} /> Log in with a password instead</>}
-      </button>
+      {(authEmailsEnabled || mode === "magic") && (
+        <button
+          type="button"
+          onClick={() => switchMode(mode === "password" ? "magic" : "password")}
+          disabled={busy}
+          className="focus-ring mt-3 flex h-9 w-full items-center justify-center gap-2 rounded-lg text-[13px] font-medium text-dim transition-colors hover:bg-wash hover:text-ink disabled:opacity-50"
+        >
+          {mode === "password" ? <><Mail size={14} /> Email me a magic link instead</> : <><KeyRound size={14} /> Log in with a password instead</>}
+        </button>
+      )}
     </AuthCard>
   );
 }

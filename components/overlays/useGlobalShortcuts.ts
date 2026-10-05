@@ -1,14 +1,16 @@
 "use client";
 /* ─── Locus · global keyboard shortcuts ──────────────────────────────────────
-   One window keydown listener for app-wide keys. Lists own J/K/X/Enter/Space/F
-   (and ⌘A, Shift+J/K); everything else that is global lives here.
+   One window keydown listener (bubble phase, so views that consume a key in the
+   capture phase — issue page, peek, inbox, search — win and we see
+   defaultPrevented). Lists own J/K/X/Enter/O/Space/F (and ⌘A, Shift+J/K), the
+   issue page owns its J/K; everything else that is global lives here.
    ──────────────────────────────────────────────────────────────────────────── */
 
 import { useEffect } from "react";
 import { navigate, type Route } from "@/lib/router";
 import { toast, ui, useUI, type PickerKind } from "@/lib/ui";
 import { useSync } from "@/lib/sync/store";
-import { anyOverlayOpen } from "@/components/primitives/overlay";
+import { anyOverlayOpen, modalOpen } from "@/components/primitives/overlay";
 import {
   activeTeams, confirmDeleteIssues, copyIssueIds, copyIssueLinks, createDefaultsFor, isTypingTarget, myTeamsOf,
   routeFromLocation, routeTeam, targetIssueIds, toggleAssignToMe,
@@ -20,17 +22,32 @@ const CHORD_MS = 1200;
 const PICKERS: Record<string, PickerKind> = { s: "status", p: "priority", a: "assignee", l: "labels" };
 const SHIFT_PICKERS: Record<string, PickerKind> = { p: "project", c: "cycle", e: "estimate", d: "due", m: "team" };
 
-/** ⌘K: open/close the palette without stacking it on top of another dialog. */
+/** ⌘K: open/close the palette. It replaces the transient dialogs (property picker, shortcut help)
+    but never stacks on top of work in progress — a new issue, a pending confirmation, or a view's own form. */
 function togglePalette() {
   const u = useUI.getState();
   if (u.paletteOpen) { ui.closePalette(); return; }
-  if (u.createIssue || u.picker || u.confirm) return;
+  if (u.createIssue || u.confirm) return;
+  const replaceable = Boolean(u.picker) || u.shortcutsOpen;
+  if (!replaceable && modalOpen()) return;
+  if (u.picker) ui.closePicker();
   if (u.shortcutsOpen) ui.closeShortcuts();
   if (u.mobileNavOpen) ui.setMobileNav(false);
   ui.openPalette();
 }
 
-/** The team "G A / G B / G C" should land on: the one in view, else the first of mine. */
+/** A dialog, palette, menu or the mobile drawer owns the keyboard. */
+function overlayActive(u: ReturnType<typeof useUI.getState>): boolean {
+  return u.paletteOpen || Boolean(u.createIssue) || Boolean(u.picker) || u.shortcutsOpen || Boolean(u.confirm) || anyOverlayOpen();
+}
+
+/** "[" — collapse/expand the sidebar; below md (no docked sidebar) it opens the navigation drawer. */
+function toggleSidebar() {
+  if (window.matchMedia("(min-width: 768px)").matches) ui.toggleSidebar();
+  else ui.setMobileNav(true);
+}
+
+/** The team "G T / G A / G B / G C" should land on: the one in view, else the first of mine. */
 function contextTeam(): Team | undefined {
   const s = useSync.getState();
   return routeTeam(routeFromLocation(), s) ?? myTeamsOf(s)[0] ?? activeTeams(s)[0];
@@ -49,12 +66,7 @@ function goTo(key: string): boolean {
     case "p": navigate({ kind: "projects", tab: "all" }); return true;
     case "v": navigate({ kind: "views" }); return true;
     case "s": navigate({ kind: "settings", section: "account" }); return true;
-    case "t": {
-      const s = useSync.getState();
-      const t = myTeamsOf(s)[0] ?? activeTeams(s)[0];
-      navigate(t ? { kind: "team", key: t.key, tab: "all" } : { kind: "settings", section: "teams" });
-      return true;
-    }
+    case "t": goToTeam((t) => ({ kind: "team", key: t.key, tab: "all" })); return true;
     case "a": goToTeam((t) => ({ kind: "team", key: t.key, tab: "active" })); return true;
     case "b": goToTeam((t) => ({ kind: "team", key: t.key, tab: "backlog" })); return true;
     case "c": {
@@ -91,20 +103,35 @@ export function useGlobalShortcuts() {
       const key = e.key ?? "";
       const lower = key.length === 1 ? key.toLowerCase() : key;
 
-      /* ⌘K — always, even while typing (unless an editor consumed it) */
+      /* ⌘K — toggles the palette even while typing (unless a field / menu consumed the combo) */
       if (mod && !e.altKey && !e.shiftKey && lower === "k") {
-        if (typing && e.defaultPrevented) return;
+        if (e.defaultPrevented) return;
         e.preventDefault();
+        chordAt = 0;
         if (!e.repeat) togglePalette();
         return;
       }
 
+      // fields keep their keys; a view that handled the key (capture phase) wins
       if (typing || e.defaultPrevented) { chordAt = 0; return; }
       const u = useUI.getState();
-      if (u.paletteOpen || u.createIssue || u.picker || u.shortcutsOpen || u.confirm || anyOverlayOpen()) { chordAt = 0; return; }
+
+      /* Escape: mobile drawer → selection → peek (dialogs and menus close themselves) */
+      if (key === "Escape") {
+        chordAt = 0;
+        if (mod || e.altKey || e.shiftKey) return;
+        if (u.mobileNavOpen) { e.preventDefault(); ui.setMobileNav(false); return; }
+        if (overlayActive(u)) return;
+        if (u.selected.length) { e.preventDefault(); ui.clearSelection(); return; }
+        if (u.peekIssueId) { e.preventDefault(); ui.peek(null); }
+        return;
+      }
+
+      if (overlayActive(u)) { chordAt = 0; return; }
 
       /* modifier combos acting on the target issues */
       if (mod) {
+        chordAt = 0;
         if (e.altKey) return;
         const isPeriod = !e.shiftKey && (e.code === "Period" || key === ".");
         const isComma = e.shiftKey && (e.code === "Comma" || key === "," || key === "<");
@@ -119,17 +146,7 @@ export function useGlobalShortcuts() {
         else confirmDeleteIssues(ids);
         return;
       }
-      if (e.altKey) return;
-
-      /* Escape: selection → peek → mobile drawer */
-      if (key === "Escape") {
-        chordAt = 0;
-        if (u.selected.length) { e.preventDefault(); ui.clearSelection(); return; }
-        if (u.peekIssueId) { e.preventDefault(); ui.peek(null); return; }
-        if (u.mobileNavOpen) { e.preventDefault(); ui.setMobileNav(false); }
-        return;
-      }
-
+      if (e.altKey) { chordAt = 0; return; }
       if (e.repeat) return;
 
       /* G-chords */
@@ -143,14 +160,14 @@ export function useGlobalShortcuts() {
       /* general */
       if (key === "?") { e.preventDefault(); ui.openShortcuts(); return; }
       if (key === "/") { e.preventDefault(); goToSearch(); return; }
-      if (key === "[") { e.preventDefault(); ui.toggleSidebar(); return; }
+      if (key === "[") { e.preventDefault(); toggleSidebar(); return; }
       if (lower === "c" && !e.shiftKey) {
         e.preventDefault();
         ui.openCreateIssue(createDefaultsFor(routeFromLocation()));
         return;
       }
 
-      /* issue shortcuts on ui.targetIds() */
+      /* issue shortcuts on ui.targetIds() (falls back to the open issue page) */
       const pickerKind: PickerKind | undefined = (e.shiftKey ? SHIFT_PICKERS : PICKERS)[lower];
       const isAssignMe = lower === "i" && !e.shiftKey;
       if (!pickerKind && !isAssignMe) return;

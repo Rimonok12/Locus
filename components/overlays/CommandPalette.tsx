@@ -2,11 +2,12 @@
 /* ─── Locus · command palette (⌘K) ───────────────────────────────────────────
    cmdk with shouldFilter={false}: static commands are matched here, issue and
    project matches are computed over the whole store, so nothing gets hidden by
-   cmdk's own scoring. Issue commands act on the context captured at open time
-   (selection → peek → focused row → the open issue page).
+   cmdk's own scoring and our order is kept. Issue commands act on the context
+   captured at open time (selection → peek → focused row → the open issue page).
+   Typed text can always fall through to the full search page.
    ──────────────────────────────────────────────────────────────────────────── */
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import { Command } from "cmdk";
 import {
   Archive, ArchiveRestore, ArrowRightLeft, CalendarDays, Check, CircleDot, Copy, CopyPlus, CornerDownLeft, Hexagon, Inbox, Keyboard,
@@ -15,7 +16,7 @@ import {
 } from "lucide-react";
 import { ui, useUI, type PickerKind, type Theme } from "@/lib/ui";
 import { signOut, useSync } from "@/lib/sync/store";
-import { navigate, useRoute, type Route } from "@/lib/router";
+import { hrefFor, navigate, useRoute, type Route } from "@/lib/router";
 import { issueKey, PROJECT_STATUS_LABEL, useMyTeams } from "@/lib/model";
 import { archiveIssues, duplicateIssue, toggleFavorite } from "@/lib/sync/actions";
 import { Modal } from "@/components/primitives/overlay";
@@ -27,6 +28,7 @@ import {
   allAssignedToMe, archiveTargets, confirmDeleteIssues, copyIssueIds, copyIssueLinks, createDefaultsFor, keys,
   liveIds, targetIssueIds, toggleAssignToMe,
 } from "./commands";
+import { useRestoreFocus } from "./useRestoreFocus";
 import type { Issue, Project, Team } from "@/lib/types";
 
 export default function CommandPalette() {
@@ -86,20 +88,23 @@ function searchIssues(issues: Record<string, Issue>, teams: Record<string, Team>
   const tokens = q.split(/\s+/).filter(Boolean);
   const num = /^\d+$/.test(q) ? Number(q) : null;
   const keyish = q.includes("-");
+  /** "eng 12" spelled as an identifier */
+  const spacedKey = q.replace(/^([a-z][a-z0-9]*)\s+(\d+)$/, "$1-$2");
   const scored: { i: Issue; r: number }[] = [];
   for (const i of Object.values(issues)) {
     const teamKey = (teams[i.team_id]?.key ?? "").toLowerCase();
     const key = `${teamKey}-${i.number}`;
     const title = i.title.toLowerCase();
     let r = -1;
-    if (key === q) r = 0;
+    if (key === q || key === spacedKey) r = 0;
     else if ((num !== null && i.number === num) || (keyish && key.startsWith(q))) r = 1;
     else if (title.startsWith(q)) r = 2;
     else {
       let viaTitle = false;
       const ok = tokens.every((t) => {
         if (title.includes(t)) { viaTitle = true; return true; }
-        return t === teamKey || t === key;
+        // "eng 12" → ENG-12: a team key and a bare number are identifier parts
+        return t === teamKey || t === key || (/^\d+$/.test(t) && i.number === Number(t));
       });
       if (ok) r = viaTitle ? 3 : 4;
     }
@@ -144,8 +149,12 @@ function Palette() {
   const targetIssues = useMemo(() => targetIds.map((id) => issues[id]), [targetIds, issues]);
   const single = targetIssues.length === 1 ? targetIssues[0] : undefined;
 
+  /* dismissed without running anything → focus goes back where it was (e.g. the comment being typed) */
+  const ran = useRef(false);
+  useRestoreFocus(() => ran.current);
+
   /* close the palette, then act — keeps focus handling predictable */
-  const act = (fn: () => void) => () => { ui.closePalette(); fn(); };
+  const act = (fn: () => void) => () => { ran.current = true; ui.closePalette(); fn(); };
   const go = (to: Route | string) => act(() => navigate(to));
 
   const groups = useMemo((): CmdGroup[] => {
@@ -248,7 +257,7 @@ function Palette() {
         themeCmd("system", "System", <Monitor size={15} />),
         {
           id: "sidebar", label: "Toggle sidebar", icon: <PanelLeft size={15} />, keywords: "navigation collapse expand menu", shortcut: ["["],
-          run: act(() => (window.innerWidth < 768 ? ui.setMobileNav(true) : ui.toggleSidebar())),
+          run: act(() => (window.matchMedia("(min-width: 768px)").matches ? ui.toggleSidebar() : ui.setMobileNav(true))),
         },
       ],
     });
@@ -270,7 +279,7 @@ function Palette() {
   const commandGroups = useMemo(() => filterGroups(groups, q), [groups, q]);
   const issueMatches = useMemo(() => searchIssues(issues, teams, q), [issues, teams, q]);
   const projectMatches = useMemo(() => searchProjects(projects, q), [projects, q]);
-  const issuesFirst = /^([a-z][a-z0-9]*-)?\d+$/.test(q) || (issueMatches.length > 0 && commandGroups.length === 0);
+  const issuesFirst = /^([a-z][a-z0-9]*(-|\s+))?\d+$/.test(q) || (issueMatches.length > 0 && commandGroups.length === 0);
 
   const issueGroup = issueMatches.length > 0 && (
     <Command.Group key="issues" heading="Issues">
@@ -313,6 +322,21 @@ function Palette() {
 
   const contextIssue = single;
   const removeContext = () => setTargets([]);
+  const nothing = Boolean(q) && !commandGroups.length && !issueMatches.length && !projectMatches.length;
+
+  /* typed text → the full search page (it reads ?q=), so a query never dead-ends */
+  const searchGroup = q ? (
+    <Command.Group key="search" heading="Search">
+      <Command.Item
+        value="search:all"
+        onSelect={go(`${hrefFor({ kind: "search" }, slug)}?q=${encodeURIComponent(query.trim())}`)}
+        className="flex h-10 cursor-pointer select-none items-center gap-3 rounded-md px-3 text-[13px] text-ink"
+      >
+        <span className="flex w-4 shrink-0 items-center justify-center text-dim"><Search size={15} /></span>
+        <span className="min-w-0 flex-1 truncate">Search all issues for “{query.trim()}”</span>
+      </Command.Item>
+    </Command.Group>
+  ) : null;
 
   return (
     <Command label="Command palette" shouldFilter={false} loop vimBindings={false} className="flex flex-col">
@@ -332,7 +356,7 @@ function Palette() {
               type="button"
               aria-label="Remove issue context"
               onClick={removeContext}
-              className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-faint hover:bg-line hover:text-ink"
+              className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-faint hover:bg-line hover:text-ink sm:h-5 sm:w-5"
             >
               <X size={12} />
             </button>
@@ -364,12 +388,12 @@ function Palette() {
       </div>
 
       <Command.List className="max-h-[min(440px,58dvh)] overflow-y-auto overscroll-contain p-1.5">
-        <Command.Empty>
-          <div className="flex flex-col items-center gap-1 py-6 text-center">
-            <span className="text-[13px] text-dim">No results for “{query.trim()}”</span>
+        {nothing && (
+          <div className="flex flex-col items-center gap-1 px-3 pb-3 pt-5 text-center">
+            <span className="text-[13px] text-dim">No commands or issues match “{query.trim()}”</span>
             <span className="text-xxs text-faint">Try an issue ID like ENG-12, a title, or a command.</span>
           </div>
-        </Command.Empty>
+        )}
         {issuesFirst && issueGroup}
         {commandGroups.map((g) => (
           <Command.Group key={g.id} heading={g.heading}>
@@ -394,6 +418,7 @@ function Palette() {
         ))}
         {!issuesFirst && issueGroup}
         {projectGroup}
+        {searchGroup}
       </Command.List>
 
       <div className="hidden items-center gap-4 border-t border-line px-4 py-2 text-xxs text-faint sm:flex">

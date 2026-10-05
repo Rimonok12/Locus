@@ -1,7 +1,7 @@
 "use client";
 /* ─── Locus · issue context menu (right-click / long-press on a list row or board card) ─── */
 
-import { useMemo, useRef } from "react";
+import { useMemo, type KeyboardEvent } from "react";
 import {
   Archive, CalendarDays, CircleDashed, Copy, CopyPlus, Hexagon, Link2, RefreshCw, SignalHigh, Star, Tag, Trash2, Triangle, UserRound,
 } from "lucide-react";
@@ -11,7 +11,6 @@ import { issueKey } from "@/lib/model";
 import { archiveIssues, copyText, deleteIssues, duplicateIssue, issueUrl, toggleFavorite } from "@/lib/sync/actions";
 import { Popover } from "@/components/primitives/overlay";
 import { ActionMenu, type ActionItem } from "@/components/primitives/SelectMenu";
-import { usePopoverFix } from "./shared";
 import type { MenuRequest } from "./useListInteractions";
 import type { Issue } from "@/lib/types";
 
@@ -25,8 +24,6 @@ export default function IssueContextMenu({ menu, onClose }: { menu: MenuRequest 
   const selected = useUI((s) => s.selected);
   const anchor = useMemo(() => (menu ? { x: menu.x, y: menu.y } : null), [menu]);
   const open = Boolean(menu && issue);
-  const contentRef = useRef<HTMLDivElement>(null);
-  usePopoverFix(open, contentRef);
 
   const items = useMemo((): ActionItem[] => {
     if (!issue) return [];
@@ -92,11 +89,23 @@ export default function IssueContextMenu({ menu, onClose }: { menu: MenuRequest 
     ];
   }, [issue, selected, favorite]);
 
+  /* the hinted letters (S/P/A/L) work inside the menu too — global shortcuts stand down while it is open */
+  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey || e.key.length !== 1) return;
+    const key = e.key.toUpperCase();
+    const item = items.find((it) => it.hint === key && !it.disabled);
+    if (!item) return;
+    e.preventDefault();
+    if (e.repeat) return;
+    item.onSelect();
+    onClose();
+  };
+
   if (!open || !issue) return null;
   const count = selected.includes(issue.id) ? selected.length : 1;
   return (
     <Popover open anchor={anchor} onClose={onClose} width={236}>
-      <div ref={contentRef}>
+      <div onKeyDown={onKeyDown}>
         <div className="truncate border-b border-line px-3 py-2 text-xxs font-medium text-faint">
           {count > 1 ? `${count} issues selected` : `${issueKey(issue)} · ${issue.title || "Untitled"}`}
         </div>

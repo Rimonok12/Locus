@@ -20,7 +20,7 @@ import { HealthDot, PriorityIcon, ProgressRing, ProjectIcon, ProjectStatusIcon, 
 import { PriorityMenu } from "@/components/pickers";
 import { DateMenu, LeadMenu, ProjectStatusMenu } from "./menus";
 import { projectActionItems } from "./projectActions";
-import { isClosed, isTypingTarget, pct, useFocusReturn, type Progress } from "./shared";
+import { isClosed, isTypingTarget, pct, type Progress } from "./shared";
 import type { Project } from "@/lib/types";
 
 /* column widths are shared by the header and every row.
@@ -36,10 +36,11 @@ const COL = {
   teams: "hidden w-[76px] xl:flex",
 };
 
-/** app-level overlays that aren't Popover/Modal based (drawer) or may be mid-open */
+/** app-level overlays requested but not yet mounted as a Modal, plus the issue peek panel
+ *  (anyOverlayOpen() already covers open popovers, modals and the mobile nav drawer) */
 const uiOverlayOpen = () => {
   const u = useUI.getState();
-  return Boolean(u.paletteOpen || u.createIssue || u.picker || u.shortcutsOpen || u.confirm || u.mobileNavOpen || u.peekIssueId);
+  return Boolean(u.paletteOpen || u.createIssue || u.picker || u.shortcutsOpen || u.confirm || u.peekIssueId);
 };
 
 const cellBtn =
@@ -122,12 +123,8 @@ function ProjectRow({
   const teams = p.team_ids.map((id) => teamsMap[id]).filter((t) => t && !t.archived_at);
   const overdue = Boolean(p.target_date && p.target_date < localToday() && !isClosed(p));
   const ratio = progress?.ratio ?? 0;
-  // picking a value returns focus to the cell, so J/K continues from this row
-  const fPriority = useFocusReturn<HTMLDivElement>();
-  const fLead = useFocusReturn<HTMLDivElement>();
-  const fTarget = useFocusReturn<HTMLDivElement>();
-  const fStatus = useFocusReturn<HTMLDivElement>();
 
+  // closing an inline picker returns focus to its trigger (Popover), so J/K continues from this row
   return (
     <div
       role="row"
@@ -162,10 +159,9 @@ function ProjectRow({
       </div>
 
       {/* priority */}
-      <div role="cell" ref={fPriority.ref} className={COL.priority}>
+      <div role="cell" className={COL.priority}>
         <Dropdown
           width={220}
-          onOpenChange={fPriority.onOpenChange}
           trigger={(t) => (
             <button ref={t.ref} type="button" onClick={t.onClick} aria-expanded={t["aria-expanded"]} title={`Priority: ${PRIORITY_LABEL[p.priority]}`} aria-label="Change priority" className={`${cellBtn} w-8 justify-center px-0 ${t.open ? "border-line-strong bg-surface" : ""}`}>
               <PriorityIcon priority={p.priority} className={p.priority ? "text-dim" : "text-faint"} />
@@ -177,11 +173,10 @@ function ProjectRow({
       </div>
 
       {/* lead */}
-      <div role="cell" ref={fLead.ref} className={COL.lead}>
+      <div role="cell" className={COL.lead}>
         <Dropdown
           width={260}
           align="end"
-          onOpenChange={fLead.onOpenChange}
           trigger={(t) => (
             <button ref={t.ref} type="button" onClick={t.onClick} aria-expanded={t["aria-expanded"]} title={lead ? `Lead: ${displayName(lead)}` : "Set lead"} aria-label="Change lead" className={`${cellBtn} w-8 justify-center px-0 ${t.open ? "border-line-strong bg-surface" : ""}`}>
               <Avatar profile={lead ?? null} size={20} />
@@ -193,11 +188,10 @@ function ProjectRow({
       </div>
 
       {/* target date */}
-      <div role="cell" ref={fTarget.ref} className={COL.target}>
+      <div role="cell" className={COL.target}>
         <Dropdown
           width={256}
           align="end"
-          onOpenChange={fTarget.onOpenChange}
           trigger={(t) => (
             <button ref={t.ref} type="button" onClick={t.onClick} aria-expanded={t["aria-expanded"]} aria-label="Change target date" title={p.target_date ? `Target: ${formatDate(p.target_date, true)}` : "Set target date"} className={`${cellBtn} ${t.open ? "border-line-strong bg-surface" : ""} ${overdue ? "text-danger" : "text-dim"}`}>
               {p.target_date ? (
@@ -213,11 +207,10 @@ function ProjectRow({
       </div>
 
       {/* status */}
-      <div role="cell" ref={fStatus.ref} className={COL.status}>
+      <div role="cell" className={COL.status}>
         <Dropdown
           width={240}
           align="end"
-          onOpenChange={fStatus.onOpenChange}
           trigger={(t) => (
             <button ref={t.ref} type="button" onClick={t.onClick} aria-expanded={t["aria-expanded"]} aria-label={`Status: ${PROJECT_STATUS_LABEL[p.status]}`} title={PROJECT_STATUS_LABEL[p.status]} className={`${cellBtn} w-8 justify-center px-0 text-dim sm:w-auto sm:max-w-full sm:justify-start sm:px-1.5 ${t.open ? "border-line-strong bg-surface" : ""}`}>
               <ProjectStatusIcon status={p.status} />

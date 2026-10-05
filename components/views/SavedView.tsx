@@ -16,7 +16,6 @@ import { Dropdown } from "@/components/primitives/overlay";
 import { ActionMenu, type ActionItem } from "@/components/primitives/SelectMenu";
 import { TeamIcon } from "@/components/primitives/icons";
 import BaseFilters from "@/components/saved-views/BaseFilters";
-import PopFix from "@/components/inbox/PopFix";
 import { PersonalBadge, RenameInput } from "@/components/saved-views/ViewRow";
 import { FavoriteButton, confirmDeleteView, duplicateView, useCanEditView, useIsFavorite } from "@/components/saved-views/viewActions";
 import type { DisplayOptions, Issue, View } from "@/lib/types";
@@ -191,13 +190,10 @@ function SavedViewBody({ view }: { view: View }) {
               )}
             >
               {(close) => (
-                <>
-                  <PopFix />
-                  <ActionMenu
-                    onDone={close}
-                    items={dirty ? [{ id: "discard", label: "Discard changes", icon: <RotateCcw size={14} />, onSelect: discard }, ...items.map((it, i) => (i === 0 ? { ...it, divider: true } : it))] : items}
-                  />
-                </>
+                <ActionMenu
+                  onDone={close}
+                  items={dirty ? [{ id: "discard", label: "Discard changes", icon: <RotateCcw size={14} />, onSelect: discard }, ...items.map((it, i) => (i === 0 ? { ...it, divider: true } : it))] : items}
+                />
               )}
             </Dropdown>
           </>

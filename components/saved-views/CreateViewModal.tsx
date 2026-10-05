@@ -15,8 +15,7 @@ import { TeamIcon } from "@/components/primitives/icons";
 import { TeamMenu } from "@/components/pickers";
 import { modKey } from "@/lib/format";
 import type { Issue } from "@/lib/types";
-import { HIDE_SAVE_VIEW, VIEW_NAME_MAX } from "./viewActions";
-import PopFix from "@/components/inbox/PopFix";
+import { VIEW_NAME_MAX } from "./viewActions";
 
 export const DRAFT_KEY = "view-draft";
 
@@ -163,10 +162,7 @@ function CreateViewForm({ onClose }: { onClose: () => void }) {
                 )}
               >
                 {(close) => (
-                  <>
-                    <PopFix focus />
-                    <TeamMenu value={teamId} onChange={(id) => { setTeamId(id); pruneDraftForTeam(id); close(); }} />
-                  </>
+                  <TeamMenu value={teamId} onChange={(id) => { setTeamId(id); pruneDraftForTeam(id); close(); }} />
                 )}
               </Dropdown>
               {team && (
@@ -204,12 +200,8 @@ function CreateViewForm({ onClose }: { onClose: () => void }) {
                 </span>
               )}
             </div>
-            {/* this modal *is* the save step — hide the filter bar's own "Save view" shortcut */}
-            {draftCount > 0 && (
-              <div className={HIDE_SAVE_VIEW}>
-                <FilterBar viewKey={DRAFT_KEY} query={query} />
-              </div>
-            )}
+            {/* the filter bar leaves out its own "Save view" shortcut for the draft key — this modal is the save step */}
+            {draftCount > 0 && <FilterBar viewKey={DRAFT_KEY} query={query} />}
           </div>
         </div>
       </div>

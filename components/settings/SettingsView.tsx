@@ -60,7 +60,7 @@ function useEscapeToExit() {
       if (e.key !== "Escape" || e.defaultPrevented || e.isComposing || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
       if (isTypingTarget(e.target) || anyOverlayOpen()) return;
       const u = useUI.getState();
-      if (u.paletteOpen || u.createIssue || u.picker || u.shortcutsOpen || u.confirm || u.mobileNavOpen || u.selected.length || u.peekIssueId) return;
+      if (u.paletteOpen || u.createIssue || u.picker || u.shortcutsOpen || u.confirm || u.selected.length || u.peekIssueId) return;
       e.preventDefault();
       navigate(BACK);
     };

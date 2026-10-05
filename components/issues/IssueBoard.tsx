@@ -7,7 +7,7 @@
    optimistically so the card never flickers back.
    ──────────────────────────────────────────────────────────────────────────── */
 
-import { memo, useCallback, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import {
   DndContext, DragOverlay, KeyboardSensor, MeasuringStrategy, PointerSensor, TouchSensor, closestCorners, useDroppable, useSensor, useSensors,
   type Announcements, type DragEndEvent, type DragOverEvent, type DragStartEvent, type DropAnimation, type MeasuringConfiguration,
@@ -91,14 +91,13 @@ function findColumn(items: Record<string, string[]>, id: string): string | undef
  * no Backlog or Done column). A column that holds issues is always shown.
  */
 function boardColumns(query: IssueQuery): IssueGroup[] {
-  const { groups, display, ctx, filters } = query;
+  const { groups, display, ctx, filters, teamId } = query;
   if (display.grouping !== "status") return groups;
   const byKey = new Map(groups.map((g) => [g.key, g]));
   const hideDone = display.completed === "none";
   const keep = (g: IssueGroup, type: string) =>
     g.issues.length > 0 || (!(hideDone && (type === "completed" || type === "canceled")) && statusGroupAllowed(g, filters, ctx));
-  const stateGroup = groups.find((g) => g.value && ctx.states[g.value]);
-  const teamId = stateGroup?.value ? ctx.states[stateGroup.value].team_id : undefined;
+  // a single-team query groups by that team's workflow states, otherwise by state type (see groupIssues)
   if (teamId) {
     return sortStates(Object.values(ctx.states).filter((s) => s.team_id === teamId))
       .map((s) => ({ type: s.type as string, g: byKey.get(s.id) ?? { key: s.id, grouping: "status" as Grouping, value: s.id, label: s.name, color: s.color, issues: [] } }))
@@ -231,6 +230,19 @@ export default function IssueBoard({
       items: { ...d.items, [from]: fromItems, [to]: [...toItems.slice(0, index), activeSid, ...toItems.slice(index)] },
     });
   }, [setDragState]);
+
+  /* Escape cancels a drag (dnd-kit's pointer/keyboard sensors listen on document). Claim the key in
+     the capture phase first so the list and global shortcuts — which run after the sensor has already
+     ended the drag — don't also clear the selection or close the peek. Other plain keys are held back
+     too while a card is in flight (no pickers or create-issue opening under a drag). */
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!dragRef.current || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key === "Escape" || e.key.length === 1) e.preventDefault();
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, []);
 
   const onDragCancel = useCallback(() => {
     setDragState(null);

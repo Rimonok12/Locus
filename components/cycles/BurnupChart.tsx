@@ -3,15 +3,18 @@
    x = each day from starts_at to ends_at · y = estimate points (1 per
    unestimated issue). Scope grows as issues are created; Started and
    Completed accumulate from started_at / completed_at. Canceled issues are
-   excluded. Lines stop at today; a dashed marker shows today.
+   excluded. Lines stop at today (or the completion day); a dashed marker
+   shows today while the cycle is running. "Today" is the viewer's local
+   date — the same todayISO() that decides the cycle's phase and days left.
    ──────────────────────────────────────────────────────────────────────────── */
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSync } from "@/lib/sync/store";
-import { STATE_TYPE_COLOR } from "@/lib/model";
-import { addDaysISO, daysBetween, formatDate, localToday } from "@/lib/format";
+import { STATE_TYPE_COLOR, cyclePhase, todayISO } from "@/lib/model";
+import { addDaysISO, daysBetween, formatDate } from "@/lib/format";
 import { useElementWidth } from "@/components/inbox/hooks";
 import type { Cycle, Issue } from "@/lib/types";
+import { localDayOf } from "./util";
 
 const H = 168;
 const PAD = { l: 30, r: 12, t: 14, b: 22 };
@@ -20,11 +23,6 @@ const MAX_DAYS = 366;
 const SCOPE = "var(--faint)";
 const STARTED = STATE_TYPE_COLOR.started;
 const DONE = "var(--accent)";
-
-function localDay(iso: string) {
-  const d = new Date(iso);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
 
 function niceMax(v: number): number {
   if (v <= 4) return 4;
@@ -36,13 +34,21 @@ function niceMax(v: number): number {
   return 10 * pow;
 }
 
-export default function BurnupChart({ cycle, issues }: { cycle: Cycle; issues: Issue[] }) {
+export default function BurnupChart({
+  cycle, issues, today = todayISO(),
+}: {
+  cycle: Cycle;
+  issues: Issue[];
+  /** local YYYY-MM-DD — pass the value the surrounding phase / days-left label used */
+  today?: string;
+}) {
   const states = useSync((s) => s.workflow_states);
   const [ref, width] = useElementWidth<HTMLDivElement>();
   const [hover, setHover] = useState<number | null>(null);
   // touch: pointerleave fires right after the tap, so keep the readout up for a moment instead
   const touchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (touchTimer.current) clearTimeout(touchTimer.current); }, []);
+  const phase = cyclePhase(cycle, today);
 
   const data = useMemo(() => {
     const n = Math.min(MAX_DAYS, Math.max(1, daysBetween(cycle.starts_at, cycle.ends_at)));
@@ -50,7 +56,7 @@ export default function BurnupChart({ cycle, issues }: { cycle: Cycle; issues: I
     const scopeAdd = new Array<number>(n + 1).fill(0);
     const startAdd = new Array<number>(n + 1).fill(0);
     const doneAdd = new Array<number>(n + 1).fill(0);
-    const at = (iso: string) => Math.min(n, Math.max(0, daysBetween(cycle.starts_at, localDay(iso))));
+    const at = (iso: string) => Math.min(n, Math.max(0, daysBetween(cycle.starts_at, localDayOf(iso))));
 
     for (const i of issues) {
       const type = states[i.state_id]?.type;
@@ -70,11 +76,15 @@ export default function BurnupChart({ cycle, issues }: { cycle: Cycle; issues: I
     const started = cum(startAdd);
     const done = cum(doneAdd);
 
-    const today = localToday();
     const todayIdx = daysBetween(cycle.starts_at, today);
-    const endIdx = cycle.completed_at ? Math.min(n, Math.max(0, daysBetween(cycle.starts_at, localDay(cycle.completed_at)))) : Math.min(n, todayIdx);
-    return { n, days, scope, started, done, todayIdx, last: endIdx, maxY: niceMax(Math.max(1, ...scope)) };
-  }, [cycle.starts_at, cycle.ends_at, cycle.completed_at, issues, states]);
+    // where the lines stop: the completion day · today while running · the end once it ran out · nowhere before it starts
+    const last = cycle.completed_at
+      ? Math.min(n, Math.max(0, daysBetween(cycle.starts_at, localDayOf(cycle.completed_at))))
+      : phase === "upcoming" ? -1
+        : phase === "current" ? Math.min(n, todayIdx)
+          : n;
+    return { n, days, scope, started, done, todayIdx, last, maxY: niceMax(Math.max(1, ...scope)) };
+  }, [cycle.starts_at, cycle.ends_at, cycle.completed_at, issues, states, today, phase]);
 
   const iw = Math.max(1, width - PAD.l - PAD.r);
   const ih = H - PAD.t - PAD.b;
@@ -98,7 +108,8 @@ export default function BurnupChart({ cycle, issues }: { cycle: Cycle; issues: I
     if (data.n - xLabels[xLabels.length - 1] < labelEvery / 2 && xLabels.length > 1) xLabels.pop();
     xLabels.push(data.n);
   }
-  const showToday = !cycle.completed_at && data.todayIdx >= 0 && data.todayIdx <= data.n;
+  // the marker means "running, and this is where it stands" — exactly when the phase is current
+  const showToday = phase === "current" && data.todayIdx >= 0 && data.todayIdx <= data.n;
 
   const onMove = (e: React.PointerEvent<SVGSVGElement>) => {
     if (touchTimer.current) { clearTimeout(touchTimer.current); touchTimer.current = null; }

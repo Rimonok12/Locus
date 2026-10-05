@@ -12,13 +12,6 @@ import type { DisplayOptions, FavoriteKind, Filter, View } from "@/lib/types";
 
 export const VIEW_NAME_MAX = 80;
 
-/**
- * Wrap the issues module's <FilterBar/> in this class where its "Save view" shortcut can't reproduce the
- * page (the New view dialog is already the save step; My issues / cycle scopes aren't expressible as the
- * filters it saves, so the view would silently show far more issues). Keyed on the button's aria-label.
- */
-export const HIDE_SAVE_VIEW = "[&_button[aria-label='Save_view']]:hidden";
-
 /** Owner or workspace admin (mirrors the views RLS policy). */
 export function useCanEditView(view: Pick<View, "owner_id"> | undefined): boolean {
   const me = useMeId();

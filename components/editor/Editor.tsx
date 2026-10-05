@@ -1,26 +1,44 @@
 "use client";
 /* ─── Locus · rich text editor ───────────────────────────────────────────────
    CONTRACT (other modules depend on these exports — keep signatures stable):
-     default Editor(props: EditorProps)   editable rich text, value is HTML
+     default Editor(props: EditorProps)   editable rich text, value is HTML.
+                                          Also takes a ref → EditorApi.
+     EditorApi { focus(at?), blur(), editor }   handle from ref / onReady
      RichText({ html, compact })          read-only render of stored HTML
      isEmptyHtml(html)                    true for "", "<p></p>", whitespace
    Tiptap v3: StarterKit (H1–H3, lists, code, quotes, autolinks), nested task
    lists, images (paste / drop → Supabase Storage), @mentions of workspace
    members, a selection toolbar, ⌘/Ctrl+Enter submit, Escape blurs.
+   External `value` changes never land under the caret: while focused they are
+   parked and applied on blur, unless the user edited the text meanwhile.
    ──────────────────────────────────────────────────────────────────────────── */
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { EditorContent, Extension, useEditor, type Editor as TiptapEditor, type EditorOptions } from "@tiptap/react";
 import { Placeholder } from "@tiptap/extensions";
 import { uploadAttachment } from "@/lib/sync/actions";
 import { toast } from "@/lib/ui";
 import { Spinner } from "@/components/primitives/controls";
-import { coreExtensions, editorInput, sanitizeHtml } from "./extensions";
+import { EDITOR_UI_ATTR, coreExtensions, editorInput, sanitizeHtml } from "./extensions";
 import { mentionSuggestion } from "./MentionList";
 import { BubbleToolbar } from "./BubbleToolbar";
 
+type FocusAt = "start" | "end" | "all";
+
+/** Imperative handle (via `ref` or `onReady`): focus the editor without DOM queries. */
+export interface EditorApi {
+  /** Focus the editor, caret at the end by default. A call made before the editor has mounted is applied once it exists. */
+  focus: (at?: FocusAt) => void;
+  blur: () => void;
+  /** The underlying Tiptap editor — null until it has mounted and after it is destroyed. */
+  readonly editor: TiptapEditor | null;
+}
+
 export interface EditorProps {
-  /** HTML. Treated as the initial value; later external changes are applied only when the editor is not focused. */
+  /**
+   * HTML. Treated as the initial value; later external changes are applied right away while the
+   * editor is not focused, otherwise on blur — and dropped if the user edited the text meanwhile.
+   */
   value: string;
   /** called on every change with the current HTML */
   onChange?: (html: string) => void;
@@ -37,6 +55,8 @@ export interface EditorProps {
   mentions?: boolean;
   minHeight?: number;
   className?: string;
+  /** called once the editor instance exists (the same api the ref exposes) */
+  onReady?: (api: EditorApi) => void;
 }
 
 export function isEmptyHtml(html: string | null | undefined): boolean {
@@ -61,17 +81,57 @@ const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 const imageFiles = (list: FileList | null | undefined): File[] =>
   Array.from(list ?? []).filter((f) => f.type.startsWith("image/"));
 
-export default function Editor({
+const Editor = forwardRef<EditorApi, EditorProps>(function Editor({
   value, onChange, onBlur, onSubmit, placeholder = "", editable = true, autoFocus = false, compact = false,
-  mentions = true, minHeight = 24, className = "",
-}: EditorProps) {
+  mentions = true, minHeight = 24, className = "", onReady,
+}, ref) {
   // Latest callbacks / flags, read by long-lived editor closures (no stale props).
-  const live = useRef({ onChange, onBlur, onSubmit, placeholder, mentions });
-  live.current = { onChange, onBlur, onSubmit, placeholder, mentions };
+  const live = useRef({ onChange, onBlur, onSubmit, placeholder, mentions, onReady });
+  live.current = { onChange, onBlur, onSubmit, placeholder, mentions, onReady };
 
   const editorRef = useRef<TiptapEditor | null>(null);
   const [uploading, setUploading] = useState(0);
   const [initialContent] = useState(() => editorInput(value || ""));
+
+  /* external value sync: `synced` is the editor HTML when it last matched `value`; `pending` is a
+     `value` that arrived while the user was in the editor (applied on blur if they didn't edit). */
+  const synced = useRef<string | null>(null);
+  const pending = useRef<string | null>(null);
+  const wantFocus = useRef<FocusAt | null>(null);
+  const [sync] = useState(() => {
+    const apply = (ed: TiptapEditor, html: string) => {
+      pending.current = null;
+      ed.commands.setContent(editorInput(html || ""), { emitUpdate: false });
+      synced.current = ed.getHTML();
+    };
+    /** focus left the editor: land a parked value unless the user changed the text since the last sync */
+    const settle = (ed: TiptapEditor) => {
+      const next = pending.current;
+      if (next == null || ed.isDestroyed) return;
+      pending.current = null;
+      if (ed.getHTML() !== synced.current) return; // local edits win — the owner persists them on blur
+      apply(ed, next);
+    };
+    return { apply, settle };
+  });
+
+  const api = useMemo<EditorApi>(() => ({
+    focus: (at = "end") => {
+      const ed = editorRef.current;
+      if (!ed || ed.isDestroyed) { wantFocus.current = at; return; }
+      ed.commands.focus(at);
+    },
+    blur: () => {
+      wantFocus.current = null;
+      const ed = editorRef.current;
+      if (ed && !ed.isDestroyed) ed.commands.blur();
+    },
+    get editor() {
+      const ed = editorRef.current;
+      return ed && !ed.isDestroyed ? ed : null;
+    },
+  }), []);
+  useImperativeHandle(ref, () => api, [api]);
 
   const extensions = useMemo(() => [
     ...coreExtensions(mentionSuggestion(() => live.current.mentions)),
@@ -165,25 +225,42 @@ export default function Editor({
     extensions,
     editorProps,
     onUpdate: ({ editor: e }) => live.current.onChange?.(e.getHTML()),
-    onBlur: ({ editor: e }) => live.current.onBlur?.(e.getHTML()),
+    onBlur: ({ editor: e, event }) => {
+      const to = event?.relatedTarget;
+      // the link field of the selection toolbar is still "in" the editor
+      if (!(to instanceof Element && to.closest(`[${EDITOR_UI_ATTR}]`))) sync.settle(e);
+      live.current.onBlur?.(e.getHTML());
+    },
   });
 
+  // the instance exists: run a focus() requested before mount, then hand out the api
   useEffect(() => {
     editorRef.current = editor;
-  }, [editor]);
+    if (!editor || editor.isDestroyed) return;
+    synced.current = editor.getHTML();
+    const at = wantFocus.current;
+    wantFocus.current = null;
+    if (at) editor.commands.focus(at);
+    live.current.onReady?.(api);
+  }, [editor, api]);
 
   // editable can change after creation
   useEffect(() => {
     if (editor && !editor.isDestroyed && editor.isEditable !== editable) editor.setEditable(editable, false);
   }, [editor, editable]);
 
-  // external value changes (realtime, another tab, reset after submit) — never while the user is typing
+  // external value changes (realtime, another tab, reset after submit) — never under the caret
   useEffect(() => {
-    if (!editor || editor.isDestroyed || editor.isFocused) return;
-    if (isEmptyHtml(value) && editor.isEmpty) return;
-    if (editor.getHTML() === value) return;
-    editor.commands.setContent(editorInput(value || ""), { emitUpdate: false });
-  }, [editor, value]);
+    if (!editor || editor.isDestroyed) return;
+    const html = editor.getHTML();
+    if (html === value || (isEmptyHtml(value) && editor.isEmpty)) {
+      synced.current = html;
+      pending.current = null;
+      return;
+    }
+    if (editor.isFocused) pending.current = value;
+    else sync.apply(editor, value);
+  }, [editor, value, sync]);
 
   const cls = `prose-locus ${compact ? "compact" : ""}`;
   return (
@@ -191,7 +268,7 @@ export default function Editor({
       {editor ? (
         <>
           <EditorContent editor={editor} />
-          {editable && <BubbleToolbar editor={editor} />}
+          {editable && <BubbleToolbar editor={editor} onLeave={sync.settle} />}
         </>
       ) : (
         // first paint (the editor mounts client-side right after) — same typography, no layout jump
@@ -206,4 +283,6 @@ export default function Editor({
       )}
     </div>
   );
-}
+});
+
+export default Editor;

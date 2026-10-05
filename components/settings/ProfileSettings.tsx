@@ -2,14 +2,14 @@
 /* ─── Locus · settings › profile (avatar, name, username, password, log out) ─── */
 
 import { useMemo, useRef, useState, type ChangeEvent } from "react";
-import { Camera, KeyRound, Loader2, LogOut, Trash2 } from "lucide-react";
+import { Camera, KeyRound, LogOut, Trash2 } from "lucide-react";
 import { signOut } from "@/lib/sync/store";
 import { supabase } from "@/lib/supabase/client";
 import { toast } from "@/lib/ui";
 import { useMe, useMembers } from "@/lib/model";
 import { updateProfile, uploadAvatar } from "@/lib/sync/actions";
 import { Avatar } from "@/components/primitives/Avatar";
-import { Button, Input } from "@/components/primitives/controls";
+import { Button, Input, Spinner } from "@/components/primitives/controls";
 import { Card, Row, Section, SettingsPage, TextField, acceptImage } from "./kit";
 
 const USERNAME = /^[a-z0-9._-]+$/;
@@ -62,7 +62,7 @@ export default function ProfileSettings() {
                   uploading ? "opacity-100" : "opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100"
                 }`}
               >
-                {uploading ? <Loader2 size={16} className="animate-spin" /> : <Camera size={16} />}
+                {uploading ? <Spinner className="text-white" /> : <Camera size={16} />}
               </span>
             </button>
             <Button size="sm" className="max-sm:h-8" onClick={() => fileRef.current?.click()} disabled={uploading}>

@@ -102,24 +102,6 @@ export function useIsFavoriteProject(projectId: string): boolean {
 }
 
 /**
- * When a dropdown inside `ref` closes and its popover took focus with it (focus fell
- * back to <body>), hand focus to the dropdown's trigger so keyboard flow continues
- * (Tab to the next chip, ⌘↵ in a modal, J/K in a list).
- */
-export function useFocusReturn<T extends HTMLElement>() {
-  const ref = useRef<T>(null);
-  const onOpenChange = useCallback((open: boolean) => {
-    if (open) return;
-    requestAnimationFrame(() => {
-      const active = document.activeElement;
-      if (active && active !== document.body) return;
-      ref.current?.querySelector<HTMLElement>("button")?.focus({ preventScroll: true });
-    });
-  }, []);
-  return { ref, onOpenChange };
-}
-
-/**
  * Debounced persistence: `schedule(v)` saves after `delay` ms of quiet, `flush()` saves now.
  * Pending values are flushed on unmount so nothing typed is ever lost.
  */
@@ -217,33 +199,30 @@ export function ChipDropdown({
   tone?: "danger";
   children: (close: () => void) => ReactNode;
 }) {
-  const focus = useFocusReturn<HTMLSpanElement>();
+  // the Popover hands focus back to this trigger on close, so Tab / ⌘↵ keep flowing
   return (
-    <span ref={focus.ref} className="contents">
-      <Dropdown
-        width={width}
-        align={align}
-        onOpenChange={focus.onOpenChange}
-        trigger={(p) => (
-          <button
-            ref={p.ref}
-            type="button"
-            onClick={p.onClick}
-            aria-expanded={p["aria-expanded"]}
-            aria-haspopup="dialog"
-            title={title}
-            className={`focus-ring inline-flex h-8 max-w-full shrink-0 items-center gap-1.5 rounded-md border px-2 text-[12.5px] transition-colors hover:bg-wash sm:h-7 ${
-              p.open ? "border-line-strong bg-wash" : "border-line-strong"
-            } ${tone === "danger" ? "text-danger" : empty ? "text-faint" : "text-ink"}`}
-          >
-            <span className="flex shrink-0 items-center">{icon}</span>
-            <span className="truncate">{label}</span>
-          </button>
-        )}
-      >
-        {children}
-      </Dropdown>
-    </span>
+    <Dropdown
+      width={width}
+      align={align}
+      trigger={(p) => (
+        <button
+          ref={p.ref}
+          type="button"
+          onClick={p.onClick}
+          aria-expanded={p["aria-expanded"]}
+          aria-haspopup="dialog"
+          title={title}
+          className={`focus-ring inline-flex h-8 max-w-full shrink-0 items-center gap-1.5 rounded-md border px-2 text-[12.5px] transition-colors hover:bg-wash sm:h-7 ${
+            p.open ? "border-line-strong bg-wash" : "border-line-strong"
+          } ${tone === "danger" ? "text-danger" : empty ? "text-faint" : "text-ink"}`}
+        >
+          <span className="flex shrink-0 items-center">{icon}</span>
+          <span className="truncate">{label}</span>
+        </button>
+      )}
+    >
+      {children}
+    </Dropdown>
   );
 }
 

@@ -14,7 +14,7 @@ import { Dropdown, Modal } from "@/components/primitives/overlay";
 import { ActionMenu } from "@/components/primitives/SelectMenu";
 import { TeamIcon } from "@/components/primitives/icons";
 import type { Team } from "@/lib/types";
-import { Badge, Card, ColorSwatches, Count, EmojiMenu, FOCUS, PopoverBody, Section, SettingsPage } from "./kit";
+import { Badge, Card, ColorSwatches, Count, EmojiMenu, Section, SettingsPage } from "./kit";
 
 export const TEAM_KEY = /^[A-Z][A-Z0-9]{0,6}$/;
 
@@ -131,17 +131,15 @@ export default function TeamsSettings() {
                   )}
                 >
                   {(close) => (
-                    <PopoverBody focus={FOCUS.menu}>
-                      <ActionMenu
-                        onDone={close}
-                        items={[
-                          { id: "settings", label: "Team settings", icon: <Settings size={14} />, onSelect: () => open(t) },
-                          joined
-                            ? { id: "leave", label: "Leave team", icon: <LogOut size={14} />, danger: true, divider: true, onSelect: () => { void leave(t); } }
-                            : { id: "join", label: "Join team", icon: <Plus size={14} />, divider: true, onSelect: async () => { if (await joinTeam(t.id)) toast.success(`Joined ${t.name}`); } },
-                        ]}
-                      />
-                    </PopoverBody>
+                    <ActionMenu
+                      onDone={close}
+                      items={[
+                        { id: "settings", label: "Team settings", icon: <Settings size={14} />, onSelect: () => open(t) },
+                        joined
+                          ? { id: "leave", label: "Leave team", icon: <LogOut size={14} />, danger: true, divider: true, onSelect: () => { void leave(t); } }
+                          : { id: "join", label: "Join team", icon: <Plus size={14} />, divider: true, onSelect: async () => { if (await joinTeam(t.id)) toast.success(`Joined ${t.name}`); } },
+                      ]}
+                    />
                   )}
                 </Dropdown>
               </div>

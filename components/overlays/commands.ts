@@ -6,8 +6,8 @@
 
 import { useSync, type SyncState } from "@/lib/sync/store";
 import { ui, useUI } from "@/lib/ui";
-import { parseRoute, type Route } from "@/lib/router";
-import { cyclePhase, findIssueByKey, issueKey, todayISO } from "@/lib/model";
+import { navigate, parseRoute, type Route } from "@/lib/router";
+import { cyclePhase, defaultStateFor, findIssueByKey, issueKey, todayISO } from "@/lib/model";
 import { archiveIssues, copyText, deleteIssues, issueUrl, updateIssues } from "@/lib/sync/actions";
 import { isMac, modKey } from "@/lib/format";
 import type { Cycle, Issue, Team } from "@/lib/types";
@@ -23,7 +23,7 @@ export function isTypingTarget(target: EventTarget | null): boolean {
   const tag = target.tagName;
   if (tag === "TEXTAREA" || tag === "SELECT") return true;
   if (tag === "INPUT") return !NON_TEXT_INPUTS.has((target as HTMLInputElement).type);
-  return Boolean(target.closest("[contenteditable='true'], [contenteditable='']"));
+  return Boolean(target.closest("[contenteditable='true'], [contenteditable=''], [role='textbox']"));
 }
 
 /** Key glyphs that adapt to the platform (⌘ / Ctrl, ⇧ / Shift, ⌫ / Backspace). */
@@ -33,6 +33,8 @@ export const keys = {
   alt: () => (isMac() ? "⌥" : "Alt"),
   backspace: () => (isMac() ? "⌫" : "Backspace"),
   enter: "↵",
+  /** one inline hint for a combo: "⌘⇧," on macOS, "Ctrl+Shift+," elsewhere */
+  combo: (...parts: string[]) => parts.join(isMac() ? "" : "+"),
 };
 
 /* ═══ route context ═══ */
@@ -107,7 +109,13 @@ export function routeCycle(team: Team, number: number | "current", s: SyncState 
 /** Create-issue defaults implied by where the user is. */
 export function createDefaultsFor(route: Route, s: SyncState = useSync.getState()): Partial<Issue> {
   switch (route.kind) {
-    case "team":
+    case "team": {
+      const t = teamByKey(route.key, s);
+      if (!t) return {};
+      // created from the Backlog tab → starts in Backlog, so it lands in the view it was created from
+      const backlog = route.tab === "backlog" ? defaultStateFor(t.id, s.workflow_states, "backlog") : undefined;
+      return backlog ? { team_id: t.id, state_id: backlog.id } : { team_id: t.id };
+    }
     case "team-cycles":
     case "team-projects": {
       const t = teamByKey(route.key, s);
@@ -211,6 +219,17 @@ export function archiveTargets(ids: string[]) {
   archiveIssues(list.map((i) => i.id));
 }
 
+/** Deleting the issue the page shows: go to its team's list first (like the page's own "Delete…"). */
+function leaveIssuePageOf(ids: string[]) {
+  const route = routeFromLocation();
+  if (route.kind !== "issue") return;
+  const s = useSync.getState();
+  const shown = findIssueByKey(route.identifier, s);
+  if (!shown || !ids.includes(shown.id)) return;
+  const team = s.teams[shown.team_id];
+  navigate(team && !team.archived_at ? { kind: "team", key: team.key, tab: "all" } : { kind: "my-issues", tab: "assigned" });
+}
+
 /** Ask before deleting; deletion itself offers Undo in its toast. */
 export function confirmDeleteIssues(ids: string[]) {
   const list = issuesOf(ids);
@@ -226,6 +245,7 @@ export function confirmDeleteIssues(ids: string[]) {
     onConfirm: async () => {
       const idsNow = list.map((i) => i.id);
       forget(idsNow);
+      leaveIssuePageOf(idsNow);
       await deleteIssues(idsNow);
     },
   });

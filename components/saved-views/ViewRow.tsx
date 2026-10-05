@@ -15,7 +15,6 @@ import type { View } from "@/lib/types";
 import { useFilterText } from "./filterText";
 import { FavoriteButton, VIEW_NAME_MAX, confirmDeleteView, duplicateView, useCanEditView } from "./viewActions";
 import { displayName } from "@/lib/model";
-import PopFix from "@/components/inbox/PopFix";
 
 export function PersonalBadge() {
   return (
@@ -136,12 +135,7 @@ function ViewRowImpl({ view }: { view: View }) {
             </IconButton>
           )}
         >
-          {(close) => (
-            <>
-              <PopFix />
-              <ActionMenu onDone={close} items={items} />
-            </>
-          )}
+          {(close) => <ActionMenu onDone={close} items={items} />}
         </Dropdown>
       </div>
     </div>

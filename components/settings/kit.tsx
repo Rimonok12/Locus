@@ -1,14 +1,13 @@
 "use client";
 /* ─── Locus · settings building blocks (page, section, card, row, inline fields, pickers) ─── */
 
-import {
-  useEffect, useLayoutEffect, useRef, useState, type ButtonHTMLAttributes, type KeyboardEvent, type ReactNode,
-} from "react";
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { Check, Copy, Lock, X } from "lucide-react";
 import { COLORS } from "@/lib/model";
 import { toast } from "@/lib/ui";
 import { copyText } from "@/lib/sync/actions";
-import { Button, Input } from "@/components/primitives/controls";
+import { cn } from "@/lib/cn";
+import { Button, Input, Textarea } from "@/components/primitives/controls";
 import { Dropdown, Modal } from "@/components/primitives/overlay";
 import { LabelDot } from "@/components/primitives/icons";
 
@@ -90,20 +89,6 @@ export function AdminNote({ children }: { children: ReactNode }) {
       <Lock size={13} className="shrink-0 text-faint" />
       <span>{children}</span>
     </div>
-  );
-}
-
-/** Outlined button with danger-colored text (secondary destructive actions). */
-export function DangerOutlineButton({ icon, children, className = "", ...rest }: ButtonHTMLAttributes<HTMLButtonElement> & { icon?: ReactNode }) {
-  return (
-    <button
-      type="button"
-      className={`focus-ring inline-flex h-7 shrink-0 select-none items-center justify-center gap-1.5 whitespace-nowrap rounded-md border border-line-strong bg-surface px-2.5 text-[12.5px] font-medium text-danger max-sm:h-8 shadow-card transition-colors hover:bg-wash disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
-      {...rest}
-    >
-      {icon}
-      {children}
-    </button>
   );
 }
 
@@ -225,35 +210,43 @@ export function TextField({
       <input
         {...handlers}
         onChange={(e) => change(e.target.value)}
-        className={`${inlineCls} ${inputClassName} ${className}`}
+        className={cn(inlineCls, inputClassName, className)}
       />
     );
   }
 
-  const boxBase = `w-full rounded-md border text-[13px] text-ink outline-none transition-colors placeholder:text-faint disabled:cursor-not-allowed disabled:text-dim ${disabled ? "bg-raised" : "bg-surface"} ${error ? "border-danger" : "border-line-strong"}`;
+  const disabledCls = "disabled:cursor-not-allowed disabled:bg-raised disabled:text-dim";
   return (
     <div className={`w-full ${className}`}>
       {multiline ? (
-        <textarea
+        <Textarea
           {...handlers}
           rows={rows}
           onChange={(e) => change(e.target.value)}
-          className={`${boxBase} resize-y px-2.5 py-2 leading-relaxed focus:border-accent focus:ring-2 focus:ring-accent-soft ${inputClassName}`}
+          className={cn("resize-y leading-relaxed", disabledCls, error && "border-danger", inputClassName)}
         />
       ) : prefix ? (
-        <div className={`flex h-8 items-stretch overflow-hidden ${boxBase} focus-within:border-accent focus-within:ring-2 focus-within:ring-accent-soft`}>
+        // sized like <Input>: 36px / 16px on mobile (no iOS zoom), 32px / 13px from sm
+        <div
+          className={cn(
+            "flex h-9 items-stretch overflow-hidden rounded-md border bg-surface text-[16px] transition-colors focus-within:border-accent focus-within:ring-2 focus-within:ring-accent-soft sm:h-8 sm:text-[13px]",
+            disabled && "bg-raised",
+            error ? "border-danger" : "border-line-strong",
+          )}
+        >
           <span className="flex select-none items-center pl-2.5 text-faint">{prefix}</span>
           <input
             {...handlers}
             onChange={(e) => change(e.target.value)}
-            className={`min-w-0 flex-1 bg-transparent pl-0.5 pr-2.5 text-[13px] text-ink outline-none placeholder:text-faint disabled:cursor-not-allowed disabled:text-dim ${inputClassName}`}
+            className={cn("min-w-0 flex-1 bg-transparent pl-0.5 pr-2.5 text-ink outline-none placeholder:text-faint disabled:cursor-not-allowed disabled:text-dim", inputClassName)}
           />
         </div>
       ) : (
-        <input
+        <Input
           {...handlers}
+          invalid={Boolean(error)}
           onChange={(e) => change(e.target.value)}
-          className={`${boxBase} h-8 px-2.5 focus:border-accent focus:ring-2 focus:ring-accent-soft ${inputClassName}`}
+          className={cn(disabledCls, inputClassName)}
         />
       )}
       {error && <div className="mt-1 text-xxs text-danger">{error}</div>}
@@ -261,59 +254,8 @@ export function TextField({
   );
 }
 
-/** Compact input styling for popovers — used on a plain <input> so nothing fights the Input primitive's sizes. */
-export const compactInputCls =
-  "h-8 w-full min-w-0 rounded-md border bg-surface px-2 text-[12.5px] text-ink outline-none transition-colors placeholder:text-faint focus:border-accent focus:ring-2 focus:ring-accent-soft sm:h-7";
-
-/* ═══ popover body ═══ */
-
-/** Focus targets for PopoverBody. */
-export const FOCUS = {
-  search: "[cmdk-input]",
-  menu: "[role='menuitem']:not([disabled]), [role='menuitemradio']:not([disabled])",
-  marked: "[data-autofocus]",
-} as const;
-
-/**
- * Wrap every Dropdown body in settings with this.
- * The shared Popover measures itself before its Portal has mounted the content, so a freshly opened
- * popover would stay `visibility: hidden` until the next scroll/resize. A synthetic window scroll (which
- * Popover listens to) makes it re-measure as soon as the content exists. Because autoFocus can't land on
- * a hidden element, `focus` (a selector) moves focus in once the panel is visible; focus returns to the
- * trigger when the popover closes.
- */
-export function PopoverBody({ children, focus }: { children: ReactNode; focus?: string }) {
-  const ref = useRef<HTMLDivElement>(null);
-
-  useLayoutEffect(() => {
-    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const root = ref.current;
-    return () => {
-      if (root && root.contains(document.activeElement) && opener?.isConnected) opener.focus({ preventScroll: true });
-    };
-  }, []);
-
-  useEffect(() => {
-    window.dispatchEvent(new Event("scroll"));
-    if (!focus) return;
-    let frame = 0;
-    let tries = 0;
-    const moveFocus = () => {
-      const el = ref.current;
-      if (!el) return;
-      const panel = el.parentElement;
-      if (panel && getComputedStyle(panel).visibility === "hidden") {
-        if (tries++ < 30) frame = requestAnimationFrame(moveFocus);
-        return;
-      }
-      if (!el.contains(document.activeElement)) el.querySelector<HTMLElement>(focus)?.focus({ preventScroll: true });
-    };
-    frame = requestAnimationFrame(moveFocus);
-    return () => cancelAnimationFrame(frame);
-  }, [focus]);
-
-  return <div ref={ref}>{children}</div>;
-}
+/** Compact popover input: keeps the Input primitive's 16px mobile text (no iOS zoom), 28px / 12.5px from sm. */
+const compactInput = "h-8 min-w-0 px-2 sm:h-7 sm:text-[12.5px]";
 
 /* ═══ colors ═══ */
 
@@ -353,6 +295,7 @@ function ColorPanel({ value, onPick }: { value: string; onPick: (c: string) => v
   const [hex, setHex] = useState(value);
   const valid = HEX.test(hex.trim());
   const current = value.toLowerCase();
+  // the Popover would focus the hex input (popping the mobile keyboard); start on the current swatch instead
   const focusIndex = Math.max(0, COLORS.indexOf(current));
   return (
     <div className="p-2.5">
@@ -363,7 +306,7 @@ function ColorPanel({ value, onPick }: { value: string; onPick: (c: string) => v
             type="button"
             aria-label={c}
             aria-pressed={current === c}
-            data-autofocus={i === focusIndex ? "" : undefined}
+            autoFocus={i === focusIndex}
             onClick={() => onPick(c)}
             className="focus-ring flex h-8 w-8 items-center justify-center rounded-md hover:bg-wash"
           >
@@ -378,15 +321,16 @@ function ColorPanel({ value, onPick }: { value: string; onPick: (c: string) => v
         onSubmit={(e) => { e.preventDefault(); e.stopPropagation(); if (valid) onPick(hex.trim().toLowerCase()); }}
       >
         <span className="h-5 w-5 shrink-0 rounded-full border border-line" style={{ background: valid ? hex.trim() : "transparent" }} />
-        <input
+        <Input
           value={hex}
           onChange={(e) => setHex(e.target.value.startsWith("#") ? e.target.value : `#${e.target.value}`)}
           maxLength={7}
           aria-label="Custom hex color"
+          invalid={!valid && hex.length > 1}
           aria-invalid={!valid && hex.length > 1 ? true : undefined}
           spellCheck={false}
           autoComplete="off"
-          className={`${compactInputCls} font-mono ${!valid && hex.length > 1 ? "border-danger" : "border-line-strong"}`}
+          className={`${compactInput} font-mono`}
         />
         <Button type="submit" size="sm" className="max-sm:h-8" disabled={!valid}>Set</Button>
       </form>
@@ -417,11 +361,7 @@ export function ColorMenu({
         </button>
       )}
     >
-      {(close) => (
-        <PopoverBody focus={FOCUS.marked}>
-          <ColorPanel value={value} onPick={(c) => { close(); if (c !== value) onChange(c); }} />
-        </PopoverBody>
-      )}
+      {(close) => <ColorPanel value={value} onPick={(c) => { close(); if (c !== value) onChange(c); }} />}
     </Dropdown>
   );
 }
@@ -457,7 +397,7 @@ function EmojiPanel({ value, onPick }: { value: string | null; onPick: (icon: st
             type="button"
             aria-label={`Use ${e}`}
             aria-pressed={value === e}
-            data-autofocus={(value && EMOJIS.includes(value) ? value === e : i === 0) ? "" : undefined}
+            autoFocus={value && EMOJIS.includes(value) ? value === e : i === 0}
             onClick={() => onPick(e)}
             className={`focus-ring flex h-8 w-8 items-center justify-center rounded-md text-[17px] leading-none transition-colors hover:bg-wash ${value === e ? "bg-accent-soft" : ""}`}
           >
@@ -469,13 +409,13 @@ function EmojiPanel({ value, onPick }: { value: string | null; onPick: (icon: st
         className="mt-2 flex items-center gap-1.5 border-t border-line pt-2"
         onSubmit={(e) => { e.preventDefault(); e.stopPropagation(); if (valid) onPick(custom.trim()); }}
       >
-        <input
+        <Input
           value={custom}
           onChange={(e) => setCustom(e.target.value)}
           placeholder="Paste any emoji"
           aria-label="Custom emoji"
           autoComplete="off"
-          className={`${compactInputCls} border-line-strong`}
+          className={compactInput}
         />
         <Button type="submit" size="sm" className="max-sm:h-8" disabled={!valid}>Use</Button>
       </form>
@@ -501,24 +441,20 @@ export function EmojiMenu({
       width={288}
       disabled={disabled}
       trigger={(p) => (
-        <button
+        <Button
           ref={p.ref}
           type="button"
           onClick={p.onClick}
           aria-expanded={p["aria-expanded"]}
           disabled={disabled}
-          className="focus-ring inline-flex h-8 items-center gap-2 rounded-md border border-line-strong bg-surface px-2 text-[12.5px] font-medium text-dim shadow-card transition-colors hover:bg-wash hover:text-ink disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-surface"
+          icon={preview}
+          className="h-8 gap-2 px-2 text-dim hover:text-ink"
         >
-          {preview}
           {value ? "Change icon" : "Choose emoji"}
-        </button>
+        </Button>
       )}
     >
-      {(close) => (
-        <PopoverBody focus={FOCUS.marked}>
-          <EmojiPanel value={value} onPick={(icon) => { close(); if (icon !== value) onChange(icon); }} />
-        </PopoverBody>
-      )}
+      {(close) => <EmojiPanel value={value} onPick={(icon) => { close(); if (icon !== value) onChange(icon); }} />}
     </Dropdown>
   );
 }
