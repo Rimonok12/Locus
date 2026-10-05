@@ -6,7 +6,10 @@
     "dev": "next dev -p 3456",
     "build": "next build",
     "start": "next start -p 3456",
-    "lint": "next lint"
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit",
+    "db:test": "node scripts/test-db.mjs",
+    "db:migrate": "node scripts/migrate.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

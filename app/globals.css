@@ -2,69 +2,141 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ─── Locus theme · Color Hunt ramp: F9F7F7 / DBE2EF / 3F72AF / 112D4E ─── */
+/* ─── Locus design tokens · light ─── */
 :root {
-  --canvas: #f9f7f7;
-  --surface: #ffffff;
-  --raised: #f1f3f9;
-  --line: #dbe2ef;
-  --ink: #112d4e;
-  --dim: #51688c;
-  --faint: #8aa0bf;
-  --accent: #3f72af;
+  --canvas: #fcfcfd;       /* main content background */
+  --sidebar: #f5f5f7;      /* navigation background */
+  --surface: #ffffff;      /* cards, menus, modals */
+  --raised: #f7f7f9;       /* group headers, inputs */
+  --line: #e9e9ee;         /* hairlines */
+  --line-strong: #d9d9e0;  /* control borders */
+  --ink: #1d1e22;          /* primary text */
+  --dim: #5b5e66;          /* secondary text */
+  --faint: #8d9099;        /* tertiary text, icons */
+  --accent: #5e6ad2;       /* brand */
+  --accent-hover: #5059c4;
   --accent-ink: #ffffff;
-  --wash: #e8edf7;
+  --accent-soft: rgba(94, 106, 210, 0.12);
+  --wash: #eeeef2;         /* hover / selected */
+  --danger: #e5484d;
+  --success: #4cb782;
+  --warning: #f2994a;
+  --shadow-color: 220 20% 15%;
 }
+
+/* ─── dark ─── */
 .dark {
-  --canvas: #0c1a2c;
-  --surface: #112d4e;
-  --raised: #16365c;
-  --line: #24466e;
-  --ink: #f9f7f7;
-  --dim: #aabdd8;
-  --faint: #7390b5;
-  --accent: #6ea2dd;
-  --accent-ink: #0c1a2c;
-  --wash: #16365c;
+  --canvas: #141518;
+  --sidebar: #0f1012;
+  --surface: #1c1d21;
+  --raised: #191a1e;
+  --line: #26272c;
+  --line-strong: #34363c;
+  --ink: #eeeff1;
+  --dim: #a8abb3;
+  --faint: #6f727a;
+  --accent: #6e79d6;
+  --accent-hover: #7d87dc;
+  --accent-ink: #ffffff;
+  --accent-soft: rgba(110, 121, 214, 0.18);
+  --wash: #24252a;
+  --danger: #eb5757;
+  --success: #4cb782;
+  --warning: #f2994a;
+  --shadow-color: 0 0% 0%;
 }
 
 html, body { height: 100%; }
 body {
   background: var(--canvas);
   color: var(--ink);
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Inter", sans-serif;
+  font-family: "Inter Variable", "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   font-size: 13px;
+  font-feature-settings: "cv11", "ss01", "ss03";
   -webkit-font-smoothing: antialiased;
-  overflow: hidden;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
-* { scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
-*::-webkit-scrollbar { width: 8px; height: 8px; }
-*::-webkit-scrollbar-thumb { background: var(--line); border-radius: 8px; }
+* { scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 10px; border: 3px solid transparent; background-clip: content-box; }
 *::-webkit-scrollbar-track { background: transparent; }
 
-::selection { background: var(--accent); color: var(--accent-ink); }
+::selection { background: var(--accent-soft); }
 
-kbd {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 10px;
-  padding: 1px 5px;
-  border: 1px solid var(--line);
-  border-bottom-width: 2px;
+kbd, .kbd {
+  font-family: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line-strong);
   border-radius: 4px;
-  background: var(--surface);
+  background: var(--raised);
   color: var(--dim);
 }
 
-@keyframes locus-pop { from { opacity: 0; transform: translateY(6px) scale(0.985); } to { opacity: 1; transform: none; } }
-.pop { animation: locus-pop 0.14s cubic-bezier(0.2, 0.8, 0.3, 1); }
+/* motion */
+@keyframes locus-pop { from { opacity: 0; transform: translateY(-4px) scale(0.98); } to { opacity: 1; transform: none; } }
+@keyframes locus-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes locus-modal { from { opacity: 0; transform: translateY(8px) scale(0.98); } to { opacity: 1; transform: none; } }
+@keyframes locus-slide { from { opacity: 0; transform: translateX(16px); } to { opacity: 1; transform: none; } }
+@keyframes locus-toast { from { opacity: 0; transform: translateY(12px) scale(0.98); } to { opacity: 1; transform: none; } }
+@keyframes locus-shimmer { 0% { background-position: -400px 0; } 100% { background-position: 400px 0; } }
+.anim-pop { animation: locus-pop 0.12s cubic-bezier(0.2, 0.8, 0.3, 1); transform-origin: top; }
+.anim-fade { animation: locus-fade 0.14s ease-out; }
+.anim-modal { animation: locus-modal 0.16s cubic-bezier(0.2, 0.8, 0.3, 1); }
+.anim-slide { animation: locus-slide 0.16s cubic-bezier(0.2, 0.8, 0.3, 1); }
+.anim-toast { animation: locus-toast 0.18s cubic-bezier(0.2, 0.8, 0.3, 1); }
+.skeleton {
+  background: linear-gradient(90deg, var(--wash) 0px, var(--raised) 120px, var(--wash) 240px);
+  background-size: 800px 100%;
+  animation: locus-shimmer 1.4s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .anim-pop, .anim-fade, .anim-modal, .anim-slide, .anim-toast { animation: none; }
+}
 
-@keyframes locus-toast { 0% { opacity: 0; transform: translateY(12px); } 10%, 88% { opacity: 1; transform: none; } 100% { opacity: 0; transform: translateY(8px); } }
-.toast { animation: locus-toast 2.6s ease forwards; }
-
-.row-hover:hover { background: color-mix(in srgb, var(--wash) 60%, transparent); }
 .focus-ring:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.row-hover:hover { background: var(--wash); }
 
-/* cmdk minimal reset */
-[cmdk-overlay] { position: fixed; inset: 0; background: rgba(17, 45, 78, 0.38); backdrop-filter: blur(2px); }
-[cmdk-list] { max-height: 320px; overflow: auto; }
+/* cmdk */
+[cmdk-item][data-selected="true"] { background: var(--wash); }
+[cmdk-item][data-disabled="true"] { opacity: 0.5; }
+[cmdk-group-heading] { padding: 8px 12px 4px; font-size: 11px; font-weight: 500; color: var(--faint); }
+[cmdk-empty] { padding: 16px 12px; font-size: 12.5px; color: var(--faint); }
+
+/* ─── rich text (Tiptap) ─── */
+.prose-locus { font-size: 14px; line-height: 1.6; color: var(--ink); word-wrap: break-word; }
+.prose-locus.compact { font-size: 13px; line-height: 1.55; }
+.prose-locus > * + * { margin-top: 0.55em; }
+.prose-locus h1 { font-size: 1.45em; font-weight: 600; line-height: 1.3; margin-top: 1em; }
+.prose-locus h2 { font-size: 1.22em; font-weight: 600; line-height: 1.35; margin-top: 0.9em; }
+.prose-locus h3 { font-size: 1.06em; font-weight: 600; margin-top: 0.8em; }
+.prose-locus ul { list-style: disc; padding-left: 1.4em; }
+.prose-locus ol { list-style: decimal; padding-left: 1.4em; }
+.prose-locus li > p { margin: 0; }
+.prose-locus li + li { margin-top: 0.15em; }
+.prose-locus a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+.prose-locus code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.86em; padding: 1px 5px; border-radius: 4px; background: var(--wash); border: 1px solid var(--line); }
+.prose-locus pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; padding: 12px 14px; border-radius: 8px; background: var(--raised); border: 1px solid var(--line); overflow-x: auto; }
+.prose-locus pre code { padding: 0; border: 0; background: none; font-size: inherit; }
+.prose-locus blockquote { border-left: 3px solid var(--line-strong); padding-left: 12px; color: var(--dim); }
+.prose-locus hr { border: 0; border-top: 1px solid var(--line); margin: 1.2em 0; }
+.prose-locus img { max-width: 100%; border-radius: 8px; border: 1px solid var(--line); }
+.prose-locus ul[data-type="taskList"] { list-style: none; padding-left: 0.2em; }
+.prose-locus ul[data-type="taskList"] li { display: flex; gap: 8px; align-items: flex-start; }
+.prose-locus ul[data-type="taskList"] li > label { margin-top: 0.3em; }
+.prose-locus ul[data-type="taskList"] li > label input { accent-color: var(--accent); width: 14px; height: 14px; }
+.prose-locus ul[data-type="taskList"] li[data-checked="true"] > div { color: var(--faint); text-decoration: line-through; }
+.prose-locus .mention { color: var(--accent); background: var(--accent-soft); border-radius: 4px; padding: 0 3px; font-weight: 500; }
+.prose-locus p.is-editor-empty:first-child::before,
+.prose-locus .is-empty::before { content: attr(data-placeholder); float: left; color: var(--faint); pointer-events: none; height: 0; }
+.ProseMirror { outline: none; }
+.ProseMirror-selectednode { outline: 2px solid var(--accent); border-radius: 6px; }

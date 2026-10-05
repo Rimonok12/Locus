@@ -82,7 +82,7 @@ function setRows<T extends TableName>(table: T, rows: Row<T>[]) {
   if (!rows.length) return;
   useSync.setState((s) => {
     const next = { ...s[table] } as Rec<Row<T>>;
-    for (const r of rows) next[pkOf(table, r as Record<string, unknown>)] = r;
+    for (const r of rows) next[pkOf(table, r as unknown as Record<string, unknown>)] = r;
     return { [table]: next } as Partial<SyncState>;
   });
 }
@@ -169,15 +169,15 @@ export async function update<T extends TableName>(table: T, key: string, patch: 
   const local = { ...before, ...patch, ...(HAS_UPDATED_AT.has(table) ? { updated_at: nowIso() } : {}) } as Row<T>;
   bump(table, key, 1);
   setRow(table, local);
-  const q: QB = matchPk(supabase().from(table).update(patch as never) as QB, table, before as Record<string, unknown>);
+  const q: QB = matchPk(supabase().from(table).update(patch as never) as QB, table, before as unknown as Record<string, unknown>);
   const { data, error } = await q.select().maybeSingle();
   bump(table, key, -1);
   if (error) {
     const current = S()[table][key] as Row<T> | undefined;
     if (current) {
-      const revert = { ...current } as Record<string, unknown>;
-      for (const f of Object.keys(patch)) revert[f] = (before as Record<string, unknown>)[f];
-      setRow(table, revert as Row<T>);
+      const revert = { ...current } as unknown as Record<string, unknown>;
+      for (const f of Object.keys(patch)) revert[f] = (before as unknown as Record<string, unknown>)[f];
+      setRow(table, revert as unknown as Row<T>);
     }
     fail(error, what);
     return false;
@@ -200,7 +200,7 @@ export async function updateMany<T extends TableName>(table: T, keys: string[], 
     fail(error, what);
     return false;
   }
-  setRows(table, ((data ?? []) as Row<T>[]).filter((r) => !isPending(table, pkOf(table, r as Record<string, unknown>))));
+  setRows(table, ((data ?? []) as Row<T>[]).filter((r) => !isPending(table, pkOf(table, r as unknown as Record<string, unknown>))));
   return true;
 }
 
@@ -210,7 +210,7 @@ export async function remove<T extends TableName>(table: T, key: string, what = 
   if (!before) return false;
   bump(table, key, 1);
   deleteRows(table, [key]);
-  const { error } = await (matchPk(supabase().from(table).delete() as QB, table, before as Record<string, unknown>) as Promise<{ error: PgError | null }>);
+  const { error } = await (matchPk(supabase().from(table).delete() as QB, table, before as unknown as Record<string, unknown>) as Promise<{ error: PgError | null }>);
   bump(table, key, -1);
   if (error) {
     setRow(table, before);
@@ -270,7 +270,7 @@ async function fetchAll<T extends TableName>(table: T, scope: (q: QB) => QB = (q
 
 const toRec = <T extends TableName>(table: T, rows: Row<T>[]) => {
   const r: Rec<Row<T>> = {};
-  for (const row of rows) r[pkOf(table, row as Record<string, unknown>)] = row;
+  for (const row of rows) r[pkOf(table, row as unknown as Record<string, unknown>)] = row;
   return r;
 };
 
@@ -406,7 +406,7 @@ function scheduleSave() {
     const s = S();
     if (s.status !== "ready") return;
     const snap: Partial<Entities> = {};
-    for (const t of CACHED_TABLES) (snap as Record<string, unknown>)[t] = s[t];
+    for (const t of CACHED_TABLES) (snap as unknown as Record<string, unknown>)[t] = s[t];
     idbSet(cacheKey(), snap).catch(() => {});
   }, 1200);
 }
