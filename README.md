@@ -2,9 +2,13 @@
 
 **Issue tracking at the speed of thought.** A keyboard-first, local-first project tracker in the spirit of modern tools like Linear — built from scratch with Next.js 14, TypeScript, Tailwind CSS and Zustand.
 
-**Live demo:** https://locus-rimonok12s-projects.vercel.app *(no sign-up — seeded demo workspace, your changes persist locally)*
+**Live demo:** https://locus-navy.vercel.app *(no sign-up — seeded demo workspace, your changes persist locally)*
 
 ![Theme](https://img.shields.io/badge/theme-F9F7F7%20·%20DBE2EF%20·%203F72AF%20·%20112D4E-3F72AF)
+
+![Locus — light theme](locus-light.jpg)
+
+![Locus — dark theme](locus-dark.jpg)
 
 ## Features
 
