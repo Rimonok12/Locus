@@ -6,10 +6,9 @@ import { ArrowLeft, MailCheck } from "lucide-react";
 import type { AuthResponse } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase/client";
 import { Button } from "@/components/primitives/controls";
-import { AuthCard, AuthDivider, AuthIcon, AuthLink, FormAlert } from "./AuthCard";
-import { GoogleButton, googleEnabled } from "./GoogleButton";
+import { AuthCard, AuthIcon, AuthLink, FormAlert } from "./AuthCard";
 import { PasswordField, TextField, useCooldown, useDeferredFocus } from "./fields";
-import { EMAIL_RE, MIN_PASSWORD, authErrorMessage, callbackUrl, withNext } from "./utils";
+import { EMAIL_RE, MIN_PASSWORD, authErrorMessage, callbackUrl, isEmailUndeliverable, withNext } from "./utils";
 
 type Errors = { name?: string; email?: string; password?: string };
 
@@ -70,7 +69,9 @@ export default function SignupForm({ next }: { next: string | null }) {
     const { data, error: err } = result;
     if (err) {
       setBusy(false);
-      setError(authErrorMessage(err));
+      setError(isEmailUndeliverable(err)
+        ? "Locus can’t send a confirmation email to this address yet, so this account can’t be created right now. Please try again later."
+        : authErrorMessage(err));
       if (err.code === "user_already_exists" || err.code === "email_exists" || /already registered/i.test(err.message)) setExists(true);
       else if (err.code === "weak_password") focusLater(passwordRef);
       else if (err.code === "email_address_invalid") focusLater(emailRef);
@@ -107,7 +108,7 @@ export default function SignupForm({ next }: { next: string | null }) {
       cooldown.start(60);
       setNotice("Sent! Give it a minute to arrive.");
     } catch (e) {
-      setError(authErrorMessage(e));
+      setError(isEmailUndeliverable(e) ? "Locus can’t send email to this address yet, so the confirmation link can’t be resent." : authErrorMessage(e));
     } finally {
       setBusy(false);
     }
@@ -155,13 +156,6 @@ export default function SignupForm({ next }: { next: string | null }) {
         </p>
       }
     >
-      {googleEnabled && (
-        <>
-          <GoogleButton next={next ?? "/"} context="signup" />
-          <AuthDivider />
-        </>
-      )}
-
       <form onSubmit={onSubmit} noValidate className="space-y-3.5">
         {error && (
           <FormAlert

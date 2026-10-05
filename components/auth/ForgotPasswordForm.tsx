@@ -7,7 +7,11 @@ import { supabase } from "@/lib/supabase/client";
 import { Button } from "@/components/primitives/controls";
 import { AuthCard, AuthIcon, AuthLink, FormAlert } from "./AuthCard";
 import { TextField, useCooldown } from "./fields";
-import { EMAIL_RE, authErrorMessage, callbackUrl, withNext } from "./utils";
+import { EMAIL_RE, authErrorMessage, callbackUrl, isEmailUndeliverable, withNext } from "./utils";
+
+const UNDELIVERABLE = "Locus can’t send email to this address yet, so password reset isn’t available for it. Ask whoever runs Locus for your team to help you get back in.";
+
+const errorCopy = (err: unknown) => (isEmailUndeliverable(err) ? UNDELIVERABLE : authErrorMessage(err));
 
 export default function ForgotPasswordForm({ next = null }: { next?: string | null }) {
   const loginHref = withNext("/login", next);
@@ -40,7 +44,7 @@ export default function ForgotPasswordForm({ next = null }: { next?: string | nu
       await send(address);
       setSentTo(address);
     } catch (err) {
-      setError(authErrorMessage(err));
+      setError(errorCopy(err));
     } finally {
       setBusy(false);
     }
@@ -55,7 +59,7 @@ export default function ForgotPasswordForm({ next = null }: { next?: string | nu
       await send(sentTo);
       setNotice("Sent again. It can take a minute to arrive.");
     } catch (err) {
-      setError(authErrorMessage(err));
+      setError(errorCopy(err));
     } finally {
       setBusy(false);
     }

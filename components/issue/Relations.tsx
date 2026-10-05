@@ -2,14 +2,13 @@
 /* ─── Locus · issue relations (blocked by / blocking / related / duplicates) ─── */
 
 import { useMemo, useState, type ReactNode } from "react";
-import { Command } from "cmdk";
 import { ArrowLeftRight, ChevronLeft, Copy, Link2, OctagonAlert, OctagonX, X } from "lucide-react";
 import { useSync } from "@/lib/sync/store";
 import { issueKey } from "@/lib/model";
 import { linkProps } from "@/lib/router";
 import { addRelation, removeRelation } from "@/lib/sync/actions";
 import { StateGlyph } from "@/components/pickers";
-import { SelectMenu } from "@/components/primitives/SelectMenu";
+import { SelectMenu, type MenuItem } from "@/components/primitives/SelectMenu";
 import { Dropdown } from "@/components/primitives/overlay";
 import type { Issue, IssueRelation, RelationType, Team } from "@/lib/types";
 
@@ -116,11 +115,17 @@ function AddRelationMenu({ issue, close }: { issue: Issue; close: () => void }) 
     return Object.values(issues).filter((i) => i.id !== issue.id && !i.archived_at && !taken.has(i.id));
   }, [kind, groups, issues, issue.id]);
 
-  const results = useMemo(() => rankCandidates(pool, teams, q), [pool, teams, q]);
+  // SelectMenu only keeps the order it is given: rank the whole workspace here, render the top matches
+  const items = useMemo((): MenuItem[] => rankCandidates(pool, teams, q).map((i) => ({
+    id: i.id,
+    label: `${issueKey(i, teams)} ${i.title}`,
+    icon: <StateGlyph stateId={i.state_id} />,
+  })), [pool, teams, q]);
 
   if (!kind) {
     return (
       <SelectMenu
+        key="kinds"
         items={KINDS.filter((k) => k.add).map((k, i) => ({ id: k.kind, label: k.add, icon: k.icon, hint: i + 1 }))}
         placeholder="Add relation…"
         onSelect={(id) => setKind(id as Kind)}
@@ -131,7 +136,15 @@ function AddRelationMenu({ issue, close }: { issue: Issue; close: () => void }) 
   const back = () => { setKind(null); setQ(""); };
   const meta = KINDS.find((k) => k.kind === kind)!;
   return (
-    <div>
+    <div
+      onKeyDown={(e) => {
+        // Backspace on an empty search steps back to the relation types
+        if (e.key === "Backspace" && !q && !e.metaKey && !e.ctrlKey && !e.altKey && e.target instanceof HTMLInputElement) {
+          e.preventDefault();
+          back();
+        }
+      }}
+    >
       <div className="flex h-9 items-center gap-1 border-b border-line px-1 text-xxs font-medium text-dim">
         <button aria-label="Back to relation types" title="Back" onClick={back} className="focus-ring flex h-8 w-8 items-center justify-center rounded-md text-faint hover:bg-wash hover:text-ink sm:h-7 sm:w-7">
           <ChevronLeft size={14} />
@@ -139,44 +152,20 @@ function AddRelationMenu({ issue, close }: { issue: Issue; close: () => void }) 
         {meta.icon}
         <span>{meta.label}</span>
       </div>
-      {/* cmdk only orders what it is given: rank the whole store here and render the top matches */}
-      <Command shouldFilter={false} loop label={`${meta.label} issue`} className="flex flex-col">
-        <div className="border-b border-line px-3">
-          <Command.Input
-            autoFocus
-            value={q}
-            onValueChange={setQ}
-            onKeyDown={(e) => {
-              // Backspace on an empty search steps back to the relation types
-              if (e.key === "Backspace" && !q && !e.metaKey && !e.ctrlKey && !e.altKey) { e.preventDefault(); back(); }
-            }}
-            placeholder="Search issues…"
-            className="h-10 w-full bg-transparent text-[16px] text-ink outline-none placeholder:text-faint sm:h-9 sm:text-[13px]"
-          />
-        </div>
-        <Command.List className="overflow-y-auto p-1" style={{ maxHeight: 320 }}>
-          <Command.Empty>No matching issues</Command.Empty>
-          {results.map((i) => {
-            const key = issueKey(i, teams);
-            return (
-              <Command.Item
-                key={i.id}
-                value={i.id}
-                onSelect={() => {
-                  const r = relationFor(kind, issue.id, i.id);
-                  if (r) void addRelation(r.from, r.to, r.type);
-                  close();
-                }}
-                className="flex h-9 cursor-pointer select-none items-center gap-2 rounded-md px-2 text-[13px] text-ink sm:h-8"
-              >
-                <span className="flex w-4 shrink-0 items-center justify-center"><StateGlyph stateId={i.state_id} /></span>
-                <span className="w-[62px] shrink-0 truncate text-[12px] tabular-nums text-faint">{key}</span>
-                <span className="min-w-0 flex-1 truncate">{i.title}</span>
-              </Command.Item>
-            );
-          })}
-        </Command.List>
-      </Command>
+      <SelectMenu
+        key={kind}
+        items={items}
+        shouldFilter={false}
+        onQueryChange={setQ}
+        digitShortcuts={false}
+        placeholder="Search issues…"
+        emptyText={q.trim() ? "No matching issues" : "No issues to link"}
+        onSelect={(id) => {
+          const r = relationFor(kind, issue.id, id);
+          if (r) void addRelation(r.from, r.to, r.type);
+          close();
+        }}
+      />
     </div>
   );
 }

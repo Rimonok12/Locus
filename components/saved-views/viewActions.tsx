@@ -9,6 +9,7 @@ import { useIsAdmin, useMeId } from "@/lib/model";
 import { createView, deleteView, toggleFavorite } from "@/lib/sync/actions";
 import { IconButton } from "@/components/primitives/controls";
 import type { DisplayOptions, FavoriteKind, Filter, View } from "@/lib/types";
+import { viewDisplay, viewFilters } from "./viewData";
 
 export const VIEW_NAME_MAX = 80;
 
@@ -49,8 +50,8 @@ export async function duplicateView(view: View, override: { filters?: Filter[]; 
     color: view.color,
     team_id: view.team_id,
     shared: override.shared ?? view.shared,
-    filters: override.filters ?? view.filters,
-    display: override.display ?? view.display,
+    filters: override.filters ?? viewFilters(view),
+    display: override.display ?? viewDisplay(view),
   });
   if (copy) toast.success(`Created ${copy.name}`, { label: "Open", run: () => navigate({ kind: "view", id: copy.id }) });
   return copy;

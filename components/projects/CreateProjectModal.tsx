@@ -7,15 +7,17 @@
 import { useEffect, useRef, useState } from "react";
 import { ChevronRight, Hexagon, X } from "lucide-react";
 import { useSync } from "@/lib/sync/store";
-import { useMyTeams } from "@/lib/model";
+import { DOC_TOO_LONG, useMyTeams } from "@/lib/model";
 import { createProject } from "@/lib/sync/actions";
 import { navigate } from "@/lib/router";
 import { modKey } from "@/lib/format";
+import { toast } from "@/lib/ui";
 import { Modal, Dropdown } from "@/components/primitives/overlay";
 import { Button } from "@/components/primitives/controls";
 import { ProjectIcon } from "@/components/primitives/icons";
 import Editor, { isEmptyHtml } from "@/components/editor/Editor";
 import { IconColorPicker, ProjectPropertyChips, type ProjectFields } from "./menus";
+import { DocTooLongNote, docTooLong } from "./shared";
 import type { Project } from "@/lib/types";
 
 export default function CreateProjectModal({
@@ -55,10 +57,13 @@ function CreateProjectForm({ onClose, defaultTeamId }: { onClose: () => void; de
   }, []);
   const summaryRef = useRef<HTMLInputElement>(null);
   const valid = name.trim().length > 0;
+  const descriptionTooLong = docTooLong(description);
 
   const submit = async () => {
     setTouched(true);
     if (!valid || busyRef.current) return;
+    // the DB would reject it: keep the modal (and everything typed) open so it can be trimmed
+    if (descriptionTooLong) { toast.error(DOC_TOO_LONG); return; }
     busyRef.current = true;
     setBusy(true);
     const input: Partial<Project> & { name: string } = {
@@ -174,6 +179,7 @@ function CreateProjectForm({ onClose, defaultTeamId }: { onClose: () => void; de
             placeholder="Write a description, a project brief, or collect ideas…"
             minHeight={120}
           />
+          {descriptionTooLong && <DocTooLongNote className="mt-2" />}
         </div>
       </div>
 

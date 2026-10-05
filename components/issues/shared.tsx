@@ -5,26 +5,47 @@ import { forwardRef, useEffect, useRef, type ButtonHTMLAttributes, type ReactNod
 import { CalendarDays, Hexagon, Layers, RefreshCw, Tag, Triangle } from "lucide-react";
 import { useSync } from "@/lib/sync/store";
 import { useUI } from "@/lib/ui";
-import { STATE_TYPES, STATE_TYPE_COLOR, cycleName, useTeamByKey, type IssueGroup, type QueryCtx } from "@/lib/model";
+import { STATE_TYPES, STATE_TYPE_COLOR, cycleName, issueKey, type IssueGroup, type QueryCtx } from "@/lib/model";
 import { navigate, type Route } from "@/lib/router";
 import { dueInfo, formatDate, formatDateTime, shortAge } from "@/lib/format";
 import { Avatar } from "@/components/primitives/Avatar";
 import { LabelDot, PriorityIcon, ProgressRing, ProjectIcon, StateIcon, TeamIcon } from "@/components/primitives/icons";
 import { anyOverlayOpen } from "@/components/primitives/overlay";
 import { StateGlyph } from "@/components/pickers";
-import type { Filter, Priority, StateType, Team } from "@/lib/types";
+import type { Filter, Issue, Priority, StateType, Team } from "@/lib/types";
 
 /* ═══ routing ═══ */
 
 /**
- * Resolve the team for a URL key and keep it resolved if its key changes while the page is open
- * (renamed by a teammate in real time): the team stays pinned by id and the URL is replaced with
- * the new key instead of the view flipping to "not found". The pin only applies to the key it was
- * made for, so navigating to an unknown key still misses, and a deleted team drops out of the store.
- * `routeFor` builds this page's route for a key (read through a ref, so an inline arrow is fine).
+ * Resolve the team a team-scoped page is routed to (`team/:KEY/…`) — the shared replacement for a
+ * bare `useTeamByKey(teamKey)` on any page whose URL carries a team key (team issues, cycles, a
+ * cycle, team projects, team settings).
+ *
+ * - **Lookup:** the key is matched case-insensitively (`eng` finds `ENG`).
+ * - **Live key renames:** once resolved, the team is pinned by id. If its key changes while the page
+ *   is open (renamed here or by a teammate in real time) the page keeps rendering the same team and
+ *   the URL is *replaced* (no new history entry) with `routeFor(newKey)`, instead of flipping to
+ *   "not found". The pin only applies to the exact key it was made for, so navigating to some other
+ *   unknown key still misses.
+ * - **Misses:** returns `undefined` for an unknown key, and once the team is deleted or drops out of
+ *   the store (left the workspace) — render `<NotFound what="team" />` then.
+ * - **Re-renders:** subscribes to the routed team's row only, not to the whole teams map.
+ *
+ * `routeFor` builds *this* page's route for a key; it is read through a ref, so an inline arrow
+ * is fine and does not re-run anything.
+ *
+ * @example
+ *   const team = useRoutedTeam(teamKey, (key) => ({ kind: "team-cycles", key }));
+ *   if (!team) return <NotFound what="team" />;
  */
 export function useRoutedTeam(teamKey: string | undefined, routeFor: (key: string) => Route): Team | undefined {
-  const byKey = useTeamByKey(teamKey);
+  const wanted = teamKey?.toUpperCase();
+  // the same row object comes back until that team changes, so other teams' edits don't re-render
+  const byKey = useSync((s) => {
+    if (!wanted) return undefined;
+    for (const t of Object.values(s.teams)) if (t.key === wanted) return t;
+    return undefined;
+  });
   const pin = useRef<{ id: string; key: string } | null>(null);
   if (byKey && teamKey) pin.current = { id: byKey.id, key: teamKey };
   const pinnedId = !byKey && pin.current && pin.current.key === teamKey ? pin.current.id : null;
@@ -36,6 +57,19 @@ export function useRoutedTeam(teamKey: string | undefined, routeFor: (key: strin
     if (team && teamKey && team.key !== teamKey.toUpperCase()) navigate(routeRef.current(team.key), { replace: true });
   }, [team, teamKey]);
   return team;
+}
+
+/* ═══ identifiers ═══ */
+
+/**
+ * An issue's identifier for a row or card: `ENG-123`, or `ENG-…` while a move to another team waits
+ * for the server's new number. Subscribes to the team's key only, so edits to the rest of the team
+ * row (name, color, settings) don't re-render every row on screen.
+ */
+export function useIssueIdentifier(issue: Pick<Issue, "team_id" | "number">): string {
+  const key = useSync((s) => s.teams[issue.team_id]?.key);
+  // issueKey only reads the team's key; the one-entry map keeps its formatting (and fallback) in one place
+  return issueKey(issue, key === undefined ? {} : { [issue.team_id]: { key } as Team });
 }
 
 /* ═══ small helpers ═══ */

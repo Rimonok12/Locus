@@ -14,9 +14,8 @@ import {
   type CSSProperties, type ReactNode, type RefObject,
 } from "react";
 import { Check, ChevronRight, Plus } from "lucide-react";
-import { useSync } from "@/lib/sync/store";
 import { useUI } from "@/lib/ui";
-import { issueKey, type IssueGroup, type IssueQuery, type QueryCtx } from "@/lib/model";
+import { type IssueGroup, type IssueQuery, type QueryCtx } from "@/lib/model";
 import { hrefFor, scrollMemory } from "@/lib/router";
 import { IconButton } from "@/components/primitives/controls";
 import { Avatar } from "@/components/primitives/Avatar";
@@ -24,7 +23,7 @@ import { PriorityIcon } from "@/components/primitives/icons";
 import { LabelPills, PropertyChip, StateGlyph } from "@/components/pickers";
 import {
   AgeLabel, CycleChip, DueChip, EstimateChip, GroupIcon, MilestoneChip, ProjectChip, SubIssueChip, asSet, statusGroupAllowed,
-  type SubCounts,
+  useIssueIdentifier, type SubCounts,
 } from "./shared";
 import { useListInteractions, type MenuRequest } from "./useListInteractions";
 import type { DisplayOptions, Issue } from "@/lib/types";
@@ -278,8 +277,7 @@ const IssueRow = memo(function IssueRow({
   const id = issue.id;
   const selected = useUI((s) => asSet(s.selected).has(id));
   const focused = useUI((s) => s.focusedId === id);
-  const team = useSync((s) => s.teams[issue.team_id]);
-  const identifier = issueKey(issue, team ? { [team.id]: team } : {});
+  const identifier = useIssueIdentifier(issue); // the team's key only, not its whole row
   const href = hrefFor({ kind: "issue", identifier });
 
   // interactive pickers mount once the row is near the viewport

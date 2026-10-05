@@ -18,7 +18,7 @@ import { Archive, ArrowUpRight, ChevronRight, Link2, Plus } from "lucide-react";
 import { useSync } from "@/lib/sync/store";
 import { ui, useUI } from "@/lib/ui";
 import { issueKey, useIssueByKey, useSubIssues } from "@/lib/model";
-import { linkProps, navigate, useRoute } from "@/lib/router";
+import { canGoBackInApp, linkProps, navigate, useRoute } from "@/lib/router";
 import { formatDateTime, timeAgo } from "@/lib/format";
 import { archiveIssues } from "@/lib/sync/actions";
 import { ViewHeader } from "@/components/app/Header";
@@ -42,27 +42,6 @@ interface Pin { id: string; keys: string[] }
 type Mode = "page" | "embedded" | "bare";
 
 const NO_IDS: string[] = [];
-
-/* Minimal shape of the Navigation API (not in this TS lib's Window typings). */
-interface NavEntry { readonly index: number; readonly sameDocument: boolean }
-interface NavApi { readonly currentEntry: NavEntry | null; entries(): NavEntry[] }
-
-/**
- * True when the previous history entry is one of this app's own client-side navigations, so
- * Escape may `history.back()`. `history.length` can't tell: it also counts other sites, the
- * login page a sign-in redirected from, and entries from before a full reload. Uses the per-entry
- * index the router stamps into history.state (`locusIdx`) when present, else the Navigation API's
- * same-document flag; with neither, it answers false and the caller falls back to the team list.
- */
-function canGoBackInApp(): boolean {
-  const state: unknown = window.history.state;
-  const idx = state && typeof state === "object" ? (state as { locusIdx?: unknown }).locusIdx : undefined;
-  if (typeof idx === "number") return idx > 0;
-  const nav = (window as Window & { navigation?: NavApi }).navigation;
-  const current = nav?.currentEntry;
-  if (!nav || !current || current.index <= 0) return false;
-  return nav.entries()[current.index - 1]?.sameDocument === true;
-}
 
 export default function IssueView({ identifier, embedded, header = true }: {
   identifier: string;

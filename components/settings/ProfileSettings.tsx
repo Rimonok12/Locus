@@ -10,9 +10,7 @@ import { useMe, useMembers } from "@/lib/model";
 import { updateProfile, uploadAvatar } from "@/lib/sync/actions";
 import { Avatar } from "@/components/primitives/Avatar";
 import { Button, Input, Spinner } from "@/components/primitives/controls";
-import { AVATAR_IMAGE_TYPES, Card, Row, Section, SettingsPage, TextField, acceptImage } from "./kit";
-
-const AVATAR_ACCEPT = AVATAR_IMAGE_TYPES.join(",");
+import { AVATAR_IMAGE_TYPES, Card, IMAGE_ACCEPT, IMAGE_FORMATS_HINT, Row, Section, SettingsPage, TextField, acceptImage } from "./kit";
 
 const USERNAME = /^[a-z0-9._-]+$/;
 
@@ -50,7 +48,7 @@ export default function ProfileSettings() {
     <SettingsPage title="Profile" description="Manage how you appear to your teammates across Locus.">
       <Section>
         <Card>
-          <Row label="Profile picture" description="PNG, JPG, GIF or WebP, up to 2 MB.">
+          <Row label="Profile picture" description={IMAGE_FORMATS_HINT}>
             <button
               type="button"
               onClick={() => fileRef.current?.click()}
@@ -75,7 +73,7 @@ export default function ProfileSettings() {
                 Remove
               </Button>
             )}
-            <input ref={fileRef} type="file" accept={AVATAR_ACCEPT} className="hidden" onChange={onFile} />
+            <input ref={fileRef} type="file" accept={IMAGE_ACCEPT} className="hidden" onChange={onFile} />
           </Row>
           <Row label="Full name" description="Shown on issues, comments and in the sidebar.">
             <TextField

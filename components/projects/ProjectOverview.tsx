@@ -7,11 +7,11 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowRight, PenLine } from "lucide-react";
 import { useSync } from "@/lib/sync/store";
-import { STATE_TYPES, STATE_TYPE_COLOR, STATE_TYPE_LABEL, displayName } from "@/lib/model";
+import { DOC_TOO_LONG, STATE_TYPES, STATE_TYPE_COLOR, STATE_TYPE_LABEL, displayName } from "@/lib/model";
 import { updateProject } from "@/lib/sync/actions";
 import { linkProps, navigate } from "@/lib/router";
 import { daysBetween, formatDate, formatDateTime, localToday, timeAgo } from "@/lib/format";
-import { ui, useUI } from "@/lib/ui";
+import { toast, ui, useUI } from "@/lib/ui";
 import { Dropdown } from "@/components/primitives/overlay";
 import { Button, ProgressBar } from "@/components/primitives/controls";
 import { Avatar } from "@/components/primitives/Avatar";
@@ -21,7 +21,8 @@ import ProjectHeader from "./ProjectHeader";
 import Milestones from "./Milestones";
 import { IconColorPicker, ProjectPropertyChips } from "./menus";
 import {
-  HealthBadge, InlineInput, SectionTitle, isClosed, pct, useDebouncedSave, useProjectBreakdown, useProjectUpdates,
+  DocTooLongNote, HealthBadge, InlineInput, SectionTitle, docTooLong, isClosed, pct, useDebouncedSave, useProjectBreakdown,
+  useProjectUpdates,
 } from "./shared";
 import type { Project, ProjectUpdate, StateType } from "@/lib/types";
 
@@ -268,8 +269,18 @@ function DescriptionEditor({ project }: { project: Project }) {
   const id = project.id;
   // only user edits are persisted — focusing and leaving must never write back a stale copy
   const dirty = useRef(false);
+  // over MAX_DOC_CHARS the write is skipped (the DB would reject it): the editor keeps the text and
+  // a note says it isn't saved. The toast fires once per over-limit stretch, not on every typing pause.
+  const [tooLong, setTooLong] = useState(false);
+  const warned = useRef(false);
   const { schedule, flush } = useDebouncedSave<string>((html) => {
     const v = isEmptyHtml(html) ? "" : html;
+    if (docTooLong(v)) {
+      if (!warned.current) toast.error(DOC_TOO_LONG);
+      warned.current = true;
+      return;
+    }
+    warned.current = false;
     const current = useSync.getState().projects[id];
     if (current && current.description !== v) void updateProject(id, { description: v });
   }, 700);
@@ -278,7 +289,11 @@ function DescriptionEditor({ project }: { project: Project }) {
     <div className="-mx-1 rounded-md px-1">
       <Editor
         value={project.description}
-        onChange={(html) => { dirty.current = true; schedule(html); }}
+        onChange={(html) => {
+          dirty.current = true;
+          setTooLong(docTooLong(html));
+          schedule(html);
+        }}
         onBlur={(html) => {
           if (!dirty.current) return;
           dirty.current = false;
@@ -288,6 +303,7 @@ function DescriptionEditor({ project }: { project: Project }) {
         placeholder="Add a description, a project brief, or collect ideas…"
         minHeight={140}
       />
+      {tooLong && <DocTooLongNote className="mt-2" />}
     </div>
   );
 }

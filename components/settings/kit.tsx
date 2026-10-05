@@ -5,7 +5,7 @@ import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 
 import { Check, Copy, Lock, X } from "lucide-react";
 import { COLORS } from "@/lib/model";
 import { toast } from "@/lib/ui";
-import { copyText } from "@/lib/sync/actions";
+import { UPLOAD_IMAGE_TYPES, copyText } from "@/lib/sync/actions";
 import { cn } from "@/lib/cn";
 import { Button, Input, Textarea } from "@/components/primitives/controls";
 import { Dropdown, Modal } from "@/components/primitives/overlay";
@@ -500,31 +500,53 @@ export function CopyButton({ text, what = "Link copied", label = "Copy", compact
 
 export const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 
-/** MIME types the `avatars` storage bucket accepts (mirrors its allowed_mime_types). */
-export const AVATAR_IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"] as const;
+/**
+ * MIME types the `avatars` storage bucket accepts. Both buckets take the same raster-only
+ * list (UPLOAD_IMAGE_TYPES) — SVG and other active content is refused.
+ */
+export const AVATAR_IMAGE_TYPES: readonly string[] = UPLOAD_IMAGE_TYPES;
+
+/** `accept` attribute for settings image inputs: the picker only offers the types storage takes. */
+export const IMAGE_ACCEPT = UPLOAD_IMAGE_TYPES.join(",");
 
 const IMAGE_TYPE_LABEL: Record<string, string> = {
-  "image/png": "PNG", "image/jpeg": "JPG", "image/gif": "GIF", "image/webp": "WebP", "image/svg+xml": "SVG", "image/avif": "AVIF",
+  "image/png": "PNG", "image/jpeg": "JPEG", "image/gif": "GIF", "image/webp": "WebP", "image/avif": "AVIF",
 };
 
-/** "PNG, JPG, GIF or WebP" */
+const typeName = (t: string) => IMAGE_TYPE_LABEL[t] ?? t.replace(/^image\/(x-)?/, "").split(/[+;]/)[0].toUpperCase();
+
+/** "PNG, JPEG, GIF, WebP or AVIF" */
 function typeList(types: readonly string[]): string {
-  const names = Array.from(new Set(types.map((t) => IMAGE_TYPE_LABEL[t] ?? t.replace(/^image\//, "").toUpperCase())));
+  const names = Array.from(new Set(types.map(typeName)));
   return names.length > 1 ? `${names.slice(0, -1).join(", ")} or ${names[names.length - 1]}` : names[0] ?? "";
+}
+
+/** Row hint for image pickers: "PNG, JPEG, GIF, WebP or AVIF, up to 2 MB." — follows UPLOAD_IMAGE_TYPES. */
+export const IMAGE_FORMATS_HINT = `${typeList(UPLOAD_IMAGE_TYPES)}, up to ${MAX_IMAGE_BYTES / (1024 * 1024)} MB.`;
+
+/** "SVG images can't be uploaded. Only PNG, JPEG, GIF, WebP or AVIF images are supported." */
+function refusedMessage(file: File, allowed: readonly string[]): string {
+  const only = ` Only ${typeList(allowed)} images are supported.`;
+  const kind = file.type.startsWith("image/") ? typeName(file.type) : "";
+  if (/^[A-Z0-9]{2,5}$/.test(kind)) return `${kind} images can't be uploaded.${only}`;
+  const name = file.name.length > 40 ? `${file.name.slice(0, 39)}…` : file.name;
+  return `${name ? `“${name}”` : "That file"} can't be uploaded.${only}`;
 }
 
 /**
  * Validate a picked image file (type + ≤ 2 MB). Toasts and returns null when invalid.
- * Pass `types` to restrict to an exact MIME list (e.g. a storage bucket's allowed types);
- * without it any `image/*` passes.
+ * Only the raster types storage accepts (UPLOAD_IMAGE_TYPES) ever pass: `types` can narrow
+ * that list, and any type outside it (SVG, HEIC…) is ignored rather than allowed.
  */
 export function acceptImage(file: File | undefined | null, types?: readonly string[]): File | null {
   if (!file) return null;
-  if (types && types.length > 0 ? !types.includes(file.type) : !file.type.startsWith("image/")) {
-    toast.error(types && types.length > 0 ? `Use a ${typeList(types)} image.` : "Please choose an image file.");
+  const narrowed = types?.length ? UPLOAD_IMAGE_TYPES.filter((t) => types.includes(t)) : [];
+  const allowed = narrowed.length ? narrowed : UPLOAD_IMAGE_TYPES;
+  if (!allowed.includes(file.type)) {
+    toast.error(refusedMessage(file, allowed));
     return null;
   }
-  if (file.size > MAX_IMAGE_BYTES) { toast.error("Images must be 2 MB or smaller."); return null; }
+  if (file.size > MAX_IMAGE_BYTES) { toast.error(`Images must be ${MAX_IMAGE_BYTES / (1024 * 1024)} MB or smaller.`); return null; }
   return file;
 }
 

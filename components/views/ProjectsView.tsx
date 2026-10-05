@@ -3,13 +3,14 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Check, Hexagon, Plus, SlidersHorizontal } from "lucide-react";
-import { PRIORITY_RANK, useProjects, useTeamByKey } from "@/lib/model";
+import { PRIORITY_RANK, useProjects } from "@/lib/model";
 import { setQueryParam, useQueryParam, type ProjectsTab } from "@/lib/router";
 import { ViewHeader, HeaderTab } from "@/components/app/Header";
 import NotFound from "@/components/app/NotFound";
 import { Button, EmptyState, IconButton, Switch } from "@/components/primitives/controls";
 import { Dropdown } from "@/components/primitives/overlay";
 import { TeamIcon } from "@/components/primitives/icons";
+import { useRoutedTeam } from "@/components/issues/shared";
 import CreateProjectModal from "@/components/projects/CreateProjectModal";
 import ProjectsTable from "@/components/projects/ProjectsTable";
 import { useProjectStats, type Progress } from "@/components/projects/shared";
@@ -68,7 +69,8 @@ function loadPrefs(): Prefs {
 }
 
 export default function ProjectsView({ tab, teamKey }: { tab: "all" | "started" | "planned" | "backlog" | "completed"; teamKey?: string }) {
-  const team = useTeamByKey(teamKey);
+  // pinned by id: a teammate renaming the team key moves the URL along instead of showing "not found"
+  const team = useRoutedTeam(teamKey, (key) => ({ kind: "team-projects", key }));
   if (teamKey && !team) return <NotFound what="team" />;
   return <ProjectsList key={team?.id ?? "workspace"} routeTab={tab} team={team} />;
 }

@@ -7,7 +7,8 @@
      RichText({ html, compact })          read-only render of stored HTML
      isEmptyHtml(html)                    true for "", "<p></p>", whitespace
    Tiptap v3: StarterKit (H1–H3, lists, code, quotes, autolinks), nested task
-   lists, images (paste / drop → Supabase Storage), @mentions of workspace
+   lists, raster images (paste / drop → Supabase Storage; other files are refused
+   with a toast), @mentions of workspace
    members, a selection toolbar, ⌘/Ctrl+Enter submit, Escape blurs.
    External `value` changes never land under the caret: while focused they are
    parked and applied on blur, unless the user edited the text meanwhile.
@@ -16,7 +17,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { EditorContent, Extension, useEditor, type Editor as TiptapEditor, type EditorOptions } from "@tiptap/react";
 import { Placeholder } from "@tiptap/extensions";
-import { uploadAttachment } from "@/lib/sync/actions";
+import { UPLOAD_IMAGE_TYPES, uploadAttachment } from "@/lib/sync/actions";
 import { toast } from "@/lib/ui";
 import { Spinner } from "@/components/primitives/controls";
 import { EDITOR_UI_ATTR, coreExtensions, editorInput, sanitizeHtml } from "./extensions";
@@ -78,8 +79,27 @@ export function RichText({ html, compact }: { html: string; compact?: boolean })
 
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 
-const imageFiles = (list: FileList | null | undefined): File[] =>
-  Array.from(list ?? []).filter((f) => f.type.startsWith("image/"));
+const TYPE_NAMES: Record<string, string> = { "image/png": "PNG", "image/jpeg": "JPEG", "image/gif": "GIF", "image/webp": "WebP", "image/avif": "AVIF" };
+/** "PNG, JPEG, GIF, WebP or AVIF" — follows UPLOAD_IMAGE_TYPES */
+const ACCEPTED_NAMES = (() => {
+  const n = UPLOAD_IMAGE_TYPES.map((t) => TYPE_NAMES[t] ?? t.replace(/^image\//, "").toUpperCase());
+  return n.length > 1 ? `${n.slice(0, -1).join(", ")} or ${n[n.length - 1]}` : n.join("");
+})();
+
+/** Pasted / dropped files: the raster images storage accepts, and everything else (SVG, HEIC, PDF…). */
+function splitFiles(list: FileList | null | undefined): { images: File[]; refused: File[] } {
+  const images: File[] = [];
+  const refused: File[] = [];
+  for (const f of Array.from(list ?? [])) (UPLOAD_IMAGE_TYPES.includes(f.type) ? images : refused).push(f);
+  return { images, refused };
+}
+
+function toastRefused(files: File[]) {
+  if (!files.length) return;
+  const name = files.length === 1 ? files[0].name : "";
+  const what = files.length > 1 ? `${files.length} files` : name ? `“${name.length > 40 ? `${name.slice(0, 39)}…` : name}”` : "This file";
+  toast.error(`${what} can’t be added — only ${ACCEPTED_NAMES} images can be uploaded.`);
+}
 
 const Editor = forwardRef<EditorApi, EditorProps>(function Editor({
   value, onChange, onBlur, onSubmit, placeholder = "", editable = true, autoFocus = false, compact = false,
@@ -198,20 +218,24 @@ const Editor = forwardRef<EditorApi, EditorProps>(function Editor({
       }),
       transformPastedHTML: (html) => editorInput(html),
       handlePaste: (_view, event) => {
-        const files = imageFiles(event.clipboardData?.files);
-        // Office apps put a rendered image next to the text — only upload pure image pastes.
-        if (!files.length || event.clipboardData?.getData("text/plain")) return false;
+        const { images, refused } = splitFiles(event.clipboardData?.files);
+        // Office apps put a rendered image next to the text — only handle pure file pastes.
+        if ((!images.length && !refused.length) || event.clipboardData?.getData("text/plain")) return false;
         event.preventDefault();
-        void insertImages(files, null);
+        toastRefused(refused);
+        if (images.length) void insertImages(images, null);
         return true;
       },
       handleDrop: (view, event, _slice, moved) => {
         if (moved) return false;
-        const files = imageFiles(event.dataTransfer?.files);
-        if (!files.length) return false;
+        const { images, refused } = splitFiles(event.dataTransfer?.files);
+        if (!images.length && !refused.length) return false;
+        // every file drop is ours: left to the browser, an unsupported file would open in place of the page
         event.preventDefault();
+        toastRefused(refused);
+        if (!images.length) return true;
         const hit = view.posAtCoords({ left: event.clientX, top: event.clientY });
-        void insertImages(files, hit ? hit.pos : null);
+        void insertImages(images, hit ? hit.pos : null);
         return true;
       },
     };

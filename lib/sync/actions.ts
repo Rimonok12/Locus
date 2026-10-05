@@ -3,7 +3,7 @@
 
 import { supabase } from "@/lib/supabase/client";
 import {
-  deferRemove, expectWorkspaceExit, insert, mergeRows, dropRows, remove, rpc, update, updateMany, useSync, uuid,
+  closeWorkspace, deferRemove, expectWorkspaceExit, insert, mergeRows, dropRows, remove, rpc, update, updateMany, useSync, uuid,
 } from "@/lib/sync/store";
 import { toast } from "@/lib/ui";
 import { navigate } from "@/lib/router";
@@ -54,55 +54,70 @@ export function updateIssues(ids: string[], patch: Partial<Issue>) {
   return updateMany("issues", ids, patch, "Couldn't update issues");
 }
 
+/** Group ids under a key; bulk actions send one (chunked) request per group instead of one per issue. */
+function groupBy(ids: string[], keyOf: (id: string) => string | null): Map<string, string[]> {
+  const groups = new Map<string, string[]>();
+  for (const id of ids) {
+    const k = keyOf(id);
+    if (k === null) continue;
+    const list = groups.get(k);
+    if (list) list.push(id); else groups.set(k, [id]);
+  }
+  return groups;
+}
+
 /** Set a workflow state on issues that may belong to different teams (maps by state type). */
 export function setIssuesState(ids: string[], stateId: string) {
   const s = S();
   const target = s.workflow_states[stateId];
   if (!target) return;
-  const byState = new Map<string, string[]>();
-  for (const id of ids) {
+  const byState = groupBy(ids, (id) => {
     const issue = s.issues[id];
-    if (!issue) continue;
-    const st = issue.team_id === target.team_id ? target : defaultStateFor(issue.team_id, s.workflow_states, target.type);
-    if (!st) continue;
-    byState.set(st.id, [...(byState.get(st.id) ?? []), id]);
-  }
+    if (!issue) return null;
+    return (issue.team_id === target.team_id ? target : defaultStateFor(issue.team_id, s.workflow_states, target.type))?.id ?? null;
+  });
   for (const [sid, list] of byState) updateIssues(list, { state_id: sid });
 }
 
 export function setIssuesStateType(ids: string[], type: StateType) {
   const s = S();
-  for (const id of ids) {
+  const byState = groupBy(ids, (id) => {
     const issue = s.issues[id];
-    const st = issue && defaultStateFor(issue.team_id, s.workflow_states, type);
-    if (st) updateIssue(id, { state_id: st.id });
-  }
+    return (issue && defaultStateFor(issue.team_id, s.workflow_states, type)?.id) || null;
+  });
+  for (const [sid, list] of byState) updateIssues(list, { state_id: sid });
 }
 
 export function toggleIssueLabel(ids: string[], labelId: string) {
   const s = S();
   const all = ids.every((id) => s.issues[id]?.label_ids.includes(labelId));
-  for (const id of ids) {
+  const next = (id: string) => {
     const issue = s.issues[id];
-    if (!issue) continue;
-    const label_ids = all ? issue.label_ids.filter((l) => l !== labelId) : Array.from(new Set([...issue.label_ids, labelId]));
-    updateIssue(id, { label_ids });
-  }
+    return all ? issue.label_ids.filter((l) => l !== labelId) : Array.from(new Set([...issue.label_ids, labelId]));
+  };
+  // issues that end up with the same label set share one request
+  const bySet = groupBy(ids, (id) => (s.issues[id] ? JSON.stringify(next(id)) : null));
+  for (const [set, list] of bySet) updateIssues(list, { label_ids: JSON.parse(set) as string[] });
 }
 
 /**
  * Move issues to another team. Until the server hands out the new team's number the local row
  * shows KEY-… (number 0), so the old number never reads as another issue's identifier or URL.
- * The state is mapped by type locally, as the server does.
+ * The state is mapped by type locally, as the server does. Resolves with one result per id.
  */
-export function moveIssuesToTeam(ids: string[], teamId: string) {
+export function moveIssuesToTeam(ids: string[], teamId: string): Promise<boolean[]> {
   const s = S();
-  return Promise.all(ids.map((id) => {
+  const byState = groupBy(ids, (id) => {
     const issue = s.issues[id];
-    if (!issue || issue.team_id === teamId) return Promise.resolve(true);
-    const st = defaultStateFor(teamId, s.workflow_states, s.workflow_states[issue.state_id]?.type);
-    return updateIssue(id, { team_id: teamId, cycle_id: null, number: 0, ...(st ? { state_id: st.id } : {}) });
-  }));
+    if (!issue || issue.team_id === teamId) return null;
+    return defaultStateFor(teamId, s.workflow_states, s.workflow_states[issue.state_id]?.type)?.id ?? "";
+  });
+  const results = new Map<string, Promise<boolean>>();
+  for (const [sid, list] of byState) {
+    const done = updateIssues(list, { team_id: teamId, cycle_id: null, number: 0, ...(sid ? { state_id: sid } : {}) });
+    for (const id of list) results.set(id, done);
+  }
+  return Promise.all(ids.map((id) => results.get(id) ?? Promise.resolve(true)));
 }
 
 export function moveIssue(id: string, patch: Partial<Issue>, neighbours: { prev?: number; next?: number }) {
@@ -236,8 +251,11 @@ const addDays = (iso: string, n: number) => {
   return d.toISOString().slice(0, 10);
 };
 
-export const createCycle = (teamId: string, starts_at: string, ends_at: string, name = "") =>
-  insert("cycles", { team_id: teamId, starts_at, ends_at, name }, "Couldn't create cycle");
+/** The number is provisional (the next free one here): the server keeps it when free and renumbers on a clash. */
+export function createCycle(teamId: string, starts_at: string, ends_at: string, name = "") {
+  const max = Object.values(S().cycles).filter((c) => c.team_id === teamId).reduce((m, c) => Math.max(m, c.number || 0), 0);
+  return insert("cycles", { team_id: teamId, starts_at, ends_at, name, number: max + 1 }, "Couldn't create cycle");
+}
 export const updateCycle = (id: string, patch: Partial<Cycle>) => update("cycles", id, patch, "Couldn't update cycle");
 export async function deleteCycle(id: string) {
   const ok = await remove("cycles", id, "Couldn't delete cycle");
@@ -412,9 +430,13 @@ export async function uploadWorkspaceLogo(file: File) {
 export async function deleteWorkspace() {
   const id = S().workspaceId;
   expectWorkspaceExit(true); // our own membership disappears with it: not a "you were removed"
-  const { error } = await supabase().from("workspaces").delete().eq("id", id);
-  if (error) { expectWorkspaceExit(false); toast.error(`Couldn't delete workspace: ${error.message}`); return false; }
-  window.location.assign("/");
+  const { data, error } = await supabase().from("workspaces").delete().eq("id", id).select("id");
+  if (error || !data?.length) {
+    expectWorkspaceExit(false);
+    toast.error(`Couldn't delete workspace: ${error ? error.message : "only admins can delete it."}`);
+    return false;
+  }
+  closeWorkspace(); // drops this browser's copy of the workspace, then goes home
   return true;
 }
 
@@ -430,7 +452,7 @@ export async function leaveWorkspace() {
   expectWorkspaceExit(true);
   const ok = await remove("workspace_members", S().userId, "Couldn't leave workspace");
   if (!ok) { expectWorkspaceExit(false); return; }
-  window.location.assign("/");
+  closeWorkspace();
 }
 
 /** Create a workspace (onboarding / workspace switcher). Returns the slug. */

@@ -59,10 +59,11 @@ function useIssueMenu(issue: Issue, key: string, beforeDelete: () => void): Acti
   ];
 }
 
-/** Leave the issue page for its team's issue list (used before deleting from the page). */
+/** Leave the issue page for its team's issue list (used before deleting from the page), replacing its
+    history entry so Back doesn't land on the deleted issue. */
 function leaveToTeam(issue: Issue) {
   const team = useSync.getState().teams[issue.team_id];
-  navigate(team ? { kind: "team", key: team.key, tab: "all" } : { kind: "my-issues", tab: "assigned" });
+  navigate(team ? { kind: "team", key: team.key, tab: "all" } : { kind: "my-issues", tab: "assigned" }, { replace: true });
 }
 
 export type IssueActionsContext = "page" | "peek" | "embedded";

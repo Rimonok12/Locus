@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { bootstrap, teardown, useSync } from "@/lib/sync/store";
 import { applyTheme, useUI } from "@/lib/ui";
+import { navigate, stampAppEntry } from "@/lib/router";
 import type { Profile, Workspace } from "@/lib/types";
 import { LocusMark } from "@/components/primitives/icons";
 import { Button } from "@/components/primitives/controls";
@@ -21,6 +22,7 @@ export default function WorkspaceApp({ workspace, profile }: { workspace: Worksp
 
   useEffect(() => {
     setMounted(true);
+    stampAppEntry();
     bootstrap({ workspace, profile });
     return () => teardown();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -32,8 +34,8 @@ export default function WorkspaceApp({ workspace, profile }: { workspace: Worksp
     if (!slug || status !== "ready") return;
     const { pathname: p, search, hash } = window.location;
     const current = p.split("/")[1] ?? "";
-    // null state (not history.state) so Next's patched replaceState updates usePathname
-    if (current && current !== slug) window.history.replaceState(null, "", p.replace(/^\/[^/]+/, `/${slug}`) + search + hash);
+    // navigate() writes a fresh state object (not history.state) so Next's patched replaceState updates usePathname
+    if (current && current !== slug) navigate(p.replace(/^\/[^/]+/, `/${slug}`) + search + hash, { replace: true });
     try { localStorage.setItem("locus:last-workspace", slug); } catch { /* ignore */ }
     document.cookie = `locus_ws=${slug}; path=/; max-age=31536000; samesite=lax`;
   }, [slug, pathname, status]);

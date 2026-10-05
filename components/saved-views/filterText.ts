@@ -51,13 +51,15 @@ export function useFilterText() {
     }
   }, [states, profiles, labels, projects, cycles, teams]);
 
+  /** Pass stored view filters through `viewFilters` first; this still never prints "undefined". */
   const describe = useCallback((f: Filter): string => {
-    const names = f.values.map((v) => valueName(f.field, v));
-    if (!names.length) return FIELD_LABEL[f.field];
+    const label = FIELD_LABEL[f.field] ?? "Filter";
+    const names = (Array.isArray(f.values) ? f.values : []).map((v) => valueName(f.field, v) ?? String(v));
+    if (!names.length) return label;
     const many = names.length > 1;
     const op = f.op === "is" ? (many ? "is any of" : "is") : (many ? "is none of" : "is not");
     const list = names.length > 2 ? `${names.slice(0, 2).join(", ")} +${names.length - 2}` : names.join(", ");
-    return `${FIELD_LABEL[f.field]} ${op} ${list}`;
+    return `${label} ${op} ${list}`;
   }, [valueName]);
 
   const summarize = useCallback((filters: Filter[]): string => filters.map(describe).join(" · "), [describe]);

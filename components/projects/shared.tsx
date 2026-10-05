@@ -5,7 +5,7 @@ import {
   useCallback, useEffect, useMemo, useRef, useState, type InputHTMLAttributes, type ReactNode,
 } from "react";
 import { useSync } from "@/lib/sync/store";
-import { STATE_TYPES, HEALTH_COLOR, HEALTH_LABEL, progressOf } from "@/lib/model";
+import { DOC_TOO_LONG, MAX_DOC_CHARS, STATE_TYPES, HEALTH_COLOR, HEALTH_LABEL, progressOf } from "@/lib/model";
 import { hrefFor } from "@/lib/router";
 import { Dropdown } from "@/components/primitives/overlay";
 import { HealthDot } from "@/components/primitives/icons";
@@ -30,6 +30,24 @@ export const projectUrl = (id: string) => `${window.location.origin}${hrefFor({ 
 export const isClosed = (p: Pick<Project, "status">) => p.status === "completed" || p.status === "canceled";
 
 export const pct = (ratio: number) => Math.round(Math.min(1, Math.max(0, ratio)) * 100);
+
+/**
+ * true when rich-text HTML is over MAX_DOC_CHARS, counted the way the DB counts (code points,
+ * like Postgres char_length) — such a write would be rejected, so callers skip it and toast
+ * DOC_TOO_LONG. Cheap on every keystroke: only HTML already over the limit in UTF-16 units is scanned.
+ */
+export function docTooLong(html: string): boolean {
+  if (html.length <= MAX_DOC_CHARS) return false;
+  let n = html.length;
+  for (let i = 0; i < html.length - 1 && n > MAX_DOC_CHARS; i++) {
+    const c = html.charCodeAt(i);
+    if (c >= 0xd800 && c <= 0xdbff) {
+      const d = html.charCodeAt(i + 1);
+      if (d >= 0xdc00 && d <= 0xdfff) { n--; i++; }
+    }
+  }
+  return n > MAX_DOC_CHARS;
+}
 
 /** Common emoji offered by the project icon picker. */
 export const PROJECT_EMOJIS = [
@@ -223,6 +241,15 @@ export function ChipDropdown({
     >
       {children}
     </Dropdown>
+  );
+}
+
+/** Inline note under an editor whose content is over MAX_DOC_CHARS (and so isn't / can't be saved). */
+export function DocTooLongNote({ className = "" }: { className?: string }) {
+  return (
+    <p role="alert" className={`text-xxs leading-relaxed text-danger ${className}`}>
+      {DOC_TOO_LONG}
+    </p>
   );
 }
 

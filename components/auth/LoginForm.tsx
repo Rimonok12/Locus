@@ -1,15 +1,14 @@
 "use client";
-/* ─── Locus · log in: email + password (magic link when auth emails are enabled) ─── */
+/* ─── Locus · log in: email + password (magic link only when NEXT_PUBLIC_AUTH_EMAILS=on) ─── */
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ArrowLeft, KeyRound, Mail, MailCheck } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
 import { Button } from "@/components/primitives/controls";
-import { AuthCard, AuthDivider, AuthIcon, AuthLink, FormAlert } from "./AuthCard";
-import { GoogleButton, googleEnabled } from "./GoogleButton";
+import { AuthCard, AuthIcon, AuthLink, FormAlert } from "./AuthCard";
 import { authEmailsEnabled } from "@/lib/env";
 import { PasswordField, TextField, useCooldown, useDeferredFocus } from "./fields";
-import { EMAIL_RE, authErrorMessage, callbackUrl, withNext } from "./utils";
+import { EMAIL_RE, authErrorMessage, callbackUrl, isEmailUndeliverable, withNext } from "./utils";
 
 type Mode = "password" | "magic";
 
@@ -35,11 +34,11 @@ export default function LoginForm({ next, initialError }: { next: string | null;
   const passwordRef = useRef<HTMLInputElement>(null);
   const firstRender = useRef(true);
 
-  // The ?error= param has been shown — drop it so a refresh doesn't show it again.
+  // The ?error= params have been shown — drop them so a refresh doesn't show them again.
   useEffect(() => {
     if (!initialError) return;
     const url = new URL(window.location.href);
-    url.searchParams.delete("error");
+    for (const k of ["error", "error_code", "error_description"]) url.searchParams.delete(k);
     window.history.replaceState(window.history.state, "", url.pathname + url.search);
   }, [initialError]);
 
@@ -138,7 +137,12 @@ export default function LoginForm({ next, initialError }: { next: string | null;
       setError(null);
       setNotice(`We sent a new confirmation link to ${address}.`);
     } catch (err) {
-      setError(authErrorMessage(err));
+      if (isEmailUndeliverable(err)) {
+        setUnconfirmed(false); // resending can't succeed: drop the action
+        setError("Locus can’t send email to this address yet, so we can’t resend the confirmation link. Ask whoever runs Locus for your team to confirm your account.");
+      } else {
+        setError(authErrorMessage(err));
+      }
     } finally {
       setResending(false);
     }
@@ -228,13 +232,6 @@ export default function LoginForm({ next, initialError }: { next: string | null;
             Password reset links work once, in the browser you requested them from. Log in, or get a fresh link.
           </FormAlert>
         </div>
-      )}
-
-      {googleEnabled && (
-        <>
-          <GoogleButton next={dest} context="signin" />
-          <AuthDivider />
-        </>
       )}
 
       <form onSubmit={onSubmit} noValidate className="space-y-3.5">

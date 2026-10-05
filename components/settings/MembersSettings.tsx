@@ -3,7 +3,7 @@
 
 import { useMemo, useState } from "react";
 import { Check, ChevronDown, Link2, LogOut, Mail, MoreHorizontal, RefreshCw, Search, UserMinus, UserPlus, X } from "lucide-react";
-import { useSync } from "@/lib/sync/store";
+import { dropRows, useSync } from "@/lib/sync/store";
 import { toast, ui } from "@/lib/ui";
 import { displayName, useIsAdmin, useMeId, useWorkspace } from "@/lib/model";
 import { createInvite, inviteLink, leaveWorkspace, removeMember, revokeInvite, setMemberRole } from "@/lib/sync/actions";
@@ -24,6 +24,23 @@ const ROLES: { value: Role; label: string; description: string }[] = [
 const ROLE_LABEL: Record<Role, string> = { admin: "Admin", member: "Member" };
 
 const isExpired = (i: WorkspaceInvite) => Boolean(i.expires_at && Date.parse(i.expires_at) < Date.now());
+
+/** The workspace's live shared ("anyone with the link") invite: the newest unexpired one. */
+function sharedLinkOf(invites: Record<string, WorkspaceInvite>): WorkspaceInvite | undefined {
+  return Object.values(invites)
+    .filter((i) => !i.email && i.role === "member" && !i.accepted_at && !isExpired(i))
+    .sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""))[0];
+}
+
+/**
+ * Invites the server revokes when an admin removes `userId` (migration 005): every shared link,
+ * anything they minted, and pending email invites addressed to them — nothing lets them rejoin.
+ */
+function invitesRevokedOnRemoval(invites: Record<string, WorkspaceInvite>, userId: string, email: string | null): string[] {
+  return Object.values(invites)
+    .filter((i) => !i.accepted_at && (!i.email || i.invited_by === userId || (email !== null && i.email.toLowerCase() === email)))
+    .map((i) => i.id);
+}
 
 function parseEmails(text: string): { valid: string[]; invalid: string[] } {
   const parts = text.split(/[\s,;]+/).map((p) => p.trim().replace(/^<|>$/g, "").toLowerCase()).filter(Boolean);
@@ -277,12 +294,7 @@ function InviteSection({ isAdmin }: { isAdmin: boolean }) {
 function InviteLinkSection({ isAdmin, me }: { isAdmin: boolean; me: string }) {
   const invites = useSync((s) => s.workspace_invites);
   const [busy, setBusy] = useState(false);
-  const link = useMemo(
-    () => Object.values(invites)
-      .filter((i) => !i.email && i.role === "member" && !i.accepted_at && !isExpired(i))
-      .sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""))[0],
-    [invites],
-  );
+  const link = useMemo(() => sharedLinkOf(invites), [invites]);
   const creator = useSync((s) => (link?.invited_by ? s.profiles[link.invited_by] : undefined));
   const url = link?.token ? inviteLink(link.token) : null;
   const canReset = Boolean(link && (isAdmin || link.invited_by === me));
@@ -473,12 +485,28 @@ function MemberList({
   };
 
   const remove = (e: MemberEntry) => {
+    const hasLink = Boolean(sharedLinkOf(useSync.getState().workspace_invites));
     ui.askConfirm({
       title: `Remove ${e.name}?`,
-      body: `${e.name} will lose access to ${workspaceName} immediately — its teams, issues and projects. Their issues and comments stay in place.`,
+      body:
+        `${e.name} will lose access to ${workspaceName} immediately, and issues assigned to them become unassigned. ` +
+        "Their comments and the issues they created stay in place. " +
+        (hasLink
+          ? "This also resets the shared invite link: the current link stops working and a new one is created. Pending invites they created or that were sent to them are revoked."
+          : "This also resets the shared invite link and revokes pending invites they created or that were sent to them, so no old invite lets them rejoin."),
       confirmLabel: "Remove member",
       destructive: true,
-      onConfirm: async () => { if (await removeMember(e.m.user_id)) toast.success(`Removed ${e.name}`); },
+      onConfirm: async () => {
+        const before = useSync.getState().workspace_invites;
+        const hadLink = Boolean(sharedLinkOf(before));
+        const revoked = invitesRevokedOnRemoval(before, e.m.user_id, e.p?.email?.toLowerCase() ?? null);
+        if (!(await removeMember(e.m.user_id))) return;
+        // the server already deleted these; drop them now so no dead link is shown or copied before realtime catches up
+        dropRows("workspace_invites", revoked);
+        // "reset" = the old link is gone and a fresh one takes its place, like the Reset button
+        const fresh = hadLink ? await createInvite(null, "member") : null;
+        toast.success(fresh ? `Removed ${e.name} · invite link reset` : `Removed ${e.name}`);
+      },
     });
   };
 

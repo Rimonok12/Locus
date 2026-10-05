@@ -29,7 +29,8 @@ import { Avatar } from "@/components/primitives/Avatar";
 import { PriorityIcon } from "@/components/primitives/icons";
 import { LabelPills, StateGlyph } from "@/components/pickers";
 import {
-  CycleChip, DueChip, EstimateChip, GroupIcon, MilestoneChip, ProjectChip, SubIssueChip, asSet, statusGroupAllowed, type SubCounts,
+  CycleChip, DueChip, EstimateChip, GroupIcon, MilestoneChip, ProjectChip, SubIssueChip, asSet, statusGroupAllowed, useIssueIdentifier,
+  type SubCounts,
 } from "./shared";
 import { useListInteractions, type MenuRequest } from "./useListInteractions";
 import type { DisplayOptions, Grouping, Issue } from "@/lib/types";
@@ -124,11 +125,16 @@ function dropPatch(target: IssueGroup, source: IssueGroup | undefined, issue: Is
       return p ? { ...p, milestone_id: null } : null;
     }
     case "team": {
+      // Same patch as moveIssuesToTeam (lib/sync/actions.ts), built here so the drop position rides
+      // in the same single write: the cycle is team-scoped, the state maps by type (as the server
+      // does), and number 0 makes the card read KEY-… until the server hands out the new team's
+      // number — the old one would otherwise briefly show (and link to) another issue's identifier.
       const p = patchForGroup(target, issue, ctx);
       if (!p || !target.value) return null;
+      if (target.value === issue.team_id) return {};
       const type = ctx.states[issue.state_id]?.type;
       const state = defaultStateFor(target.value, ctx.states, type);
-      return { ...p, cycle_id: null, ...(state ? { state_id: state.id } : {}) };
+      return { ...p, cycle_id: null, number: 0, ...(state ? { state_id: state.id } : {}) };
     }
     default:
       return patchForGroup(target, issue, ctx);
@@ -476,8 +482,7 @@ const BoardCard = memo(function BoardCard({
   const { setNodeRef, attributes, listeners, transform, transition, isDragging } = useSortable({ id: sid });
   const focused = useUI((s) => s.focusedId === issue.id);
   const selected = useUI((s) => asSet(s.selected).has(issue.id));
-  const team = useSync((s) => s.teams[issue.team_id]);
-  const href = hrefFor({ kind: "issue", identifier: issueKey(issue, team ? { [team.id]: team } : {}) });
+  const href = hrefFor({ kind: "issue", identifier: useIssueIdentifier(issue) });
   // keep link semantics (no role="button"): Enter opens the issue, Space starts a keyboard drag
   const { role: _role, ...a11y } = attributes;
   void _role;
@@ -503,8 +508,7 @@ const BoardCard = memo(function BoardCard({
 const CardBody = memo(function CardBody({
   issue, props, grouping, subTotal, subDone,
 }: { issue: Issue; props: Properties; grouping: Grouping; subTotal: number; subDone: number }) {
-  const team = useSync((s) => s.teams[issue.team_id]);
-  const identifier = issueKey(issue, team ? { [team.id]: team } : {});
+  const identifier = useIssueIdentifier(issue);
   const showStatus = props.status && grouping !== "status";
   const showPriority = props.priority && grouping !== "priority" && issue.priority !== 0;
   return (

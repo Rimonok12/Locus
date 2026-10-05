@@ -4,7 +4,7 @@
 import { memo, useMemo, useRef, useState } from "react";
 import { Link2, MoreHorizontal, Pencil, Reply, SmilePlus, Trash2 } from "lucide-react";
 import { useSync } from "@/lib/sync/store";
-import { ui } from "@/lib/ui";
+import { toast, ui } from "@/lib/ui";
 import { displayName, useIsAdmin, useMeId } from "@/lib/model";
 import { formatDateTime, timeAgo } from "@/lib/format";
 import { addComment, copyText, deleteComment, editComment, issueUrl, toggleReaction } from "@/lib/sync/actions";
@@ -14,7 +14,8 @@ import { Avatar } from "@/components/primitives/Avatar";
 import { Button } from "@/components/primitives/controls";
 import Editor, { RichText, isEmptyHtml } from "@/components/editor/Editor";
 import type { Comment } from "@/lib/types";
-import { Composer } from "./Composer";
+import { COMMENT_TOO_LONG, Composer, MAX_COMMENT_CHARS } from "./Composer";
+import { exceedsChars } from "./shared";
 
 export const REACTIONS = ["👍", "👎", "❤️", "🎉", "😄", "😕", "🚀", "👀"];
 
@@ -129,6 +130,8 @@ function CommentItem({
   const save = () => {
     const body = draft.current;
     if (isEmptyHtml(body)) return;
+    // the database would refuse it: keep the editor open so nothing is lost
+    if (body !== comment.body && exceedsChars(body, MAX_COMMENT_CHARS)) { toast.error(COMMENT_TOO_LONG); return; }
     if (body !== comment.body) void editComment(comment.id, body);
     setEditing(false);
   };

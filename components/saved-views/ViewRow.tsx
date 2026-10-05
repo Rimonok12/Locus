@@ -13,6 +13,7 @@ import { ActionMenu, type ActionItem } from "@/components/primitives/SelectMenu"
 import { TeamIcon } from "@/components/primitives/icons";
 import type { View } from "@/lib/types";
 import { useFilterText } from "./filterText";
+import { viewFilters } from "./viewData";
 import { FavoriteButton, VIEW_NAME_MAX, confirmDeleteView, duplicateView, useCanEditView } from "./viewActions";
 import { displayName } from "@/lib/model";
 
@@ -63,7 +64,7 @@ function ViewRowImpl({ view }: { view: View }) {
   const { summarize } = useFilterText();
   const [renaming, setRenaming] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const summary = summarize(view.filters);
+  const summary = summarize(viewFilters(view));
 
   const items: ActionItem[] = [
     { id: "open", label: "Open", icon: <ArrowUpRight size={14} />, onSelect: () => navigate({ kind: "view", id: view.id }) },

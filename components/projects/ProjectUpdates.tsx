@@ -4,16 +4,16 @@
 import { useRef, useState } from "react";
 import { ArrowRight, Megaphone, Trash2 } from "lucide-react";
 import { useSync } from "@/lib/sync/store";
-import { HEALTH, displayName, useIsAdmin, useMe } from "@/lib/model";
+import { DOC_TOO_LONG, HEALTH, displayName, useIsAdmin, useMe } from "@/lib/model";
 import { deleteProjectUpdate, postProjectUpdate } from "@/lib/sync/actions";
 import { formatDateTime, modKey, timeAgo } from "@/lib/format";
-import { ui } from "@/lib/ui";
+import { toast, ui } from "@/lib/ui";
 import { Button, IconButton } from "@/components/primitives/controls";
 import { Avatar } from "@/components/primitives/Avatar";
 import { HealthDot } from "@/components/primitives/icons";
 import Editor, { RichText, isEmptyHtml } from "@/components/editor/Editor";
 import ProjectHeader from "./ProjectHeader";
-import { HealthBadge, useProjectUpdates } from "./shared";
+import { DocTooLongNote, HealthBadge, docTooLong, useProjectUpdates } from "./shared";
 import type { Health, Project, ProjectUpdate } from "@/lib/types";
 
 export default function ProjectUpdates({ project }: { project: Project }) {
@@ -61,6 +61,7 @@ function Composer({ project }: { project: Project }) {
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
   const empty = isEmptyHtml(body);
+  const tooLong = docTooLong(body);
 
   const persistDraft = (html: string) => {
     try {
@@ -71,6 +72,8 @@ function Composer({ project }: { project: Project }) {
 
   const post = async () => {
     if (busyRef.current || isEmptyHtml(body)) return;
+    // the DB would reject it: keep the draft so it can be trimmed
+    if (docTooLong(body)) { toast.error(DOC_TOO_LONG); return; }
     busyRef.current = true;
     setBusy(true);
     const created = await postProjectUpdate(project.id, health, body);
@@ -104,6 +107,7 @@ function Composer({ project }: { project: Project }) {
           compact
           minHeight={88}
         />
+        {tooLong && <DocTooLongNote className="mt-1.5" />}
       </div>
       <div className="flex flex-wrap items-center gap-2 border-t border-line px-3 py-2.5">
         <div role="radiogroup" aria-label="Project health" className="inline-flex items-center gap-0.5 rounded-md border border-line bg-raised p-0.5">

@@ -200,7 +200,6 @@ function CreateViewForm({ onClose }: { onClose: () => void }) {
                 </span>
               )}
             </div>
-            {/* the filter bar leaves out its own "Save view" shortcut for the draft key — this modal is the save step */}
             {draftCount > 0 && <FilterBar viewKey={DRAFT_KEY} query={query} />}
           </div>
         </div>

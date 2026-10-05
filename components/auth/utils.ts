@@ -1,28 +1,24 @@
 /* ─── Locus · auth helpers (pure — safe to import from server and client components) ─── */
 
+import { safeNext as sanitizeNext } from "@/lib/safe-next";
+
 /**
- * Only same-origin relative paths are allowed as post-auth destinations:
- * must start with "/", must not be protocol-relative ("//", "/\"), and must not
- * contain whitespace/control characters (browsers strip those, which can turn
- * "/\t/evil.com" into "//evil.com").
+ * Post-auth destination: a same-origin relative path, or null. Thin wrapper over
+ * `lib/safe-next.ts`, the single sanitizer shared with middleware and the auth routes.
  */
-export function safeNext(raw: string | string[] | null | undefined): string | null {
-  const v = Array.isArray(raw) ? raw[0] : raw;
-  if (!v || v.length > 2048) return null;
-  if (!v.startsWith("/") || v.startsWith("//") || v.startsWith("/\\")) return null;
-  // eslint-disable-next-line no-control-regex
-  if (/[\s\\\u0000-\u001f\u007f]/.test(v)) return null;
-  return v;
+export function safeNext(raw: Parameters<typeof sanitizeNext>[0]): string | null {
+  return sanitizeNext(raw);
 }
 
-/** Append `?next=` to an auth route when a destination is known. */
+/** Append `?next=` to an auth route when a (safe) destination is known. */
 export function withNext(path: string, next: string | null | undefined): string {
-  return next ? `${path}?next=${encodeURIComponent(next)}` : path;
+  const n = sanitizeNext(next);
+  return n ? `${path}?next=${encodeURIComponent(n)}` : path;
 }
 
 /** Absolute URL of the PKCE callback that lands the user on `next` (client only). */
 export function callbackUrl(next: string): string {
-  return `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`;
+  return `${window.location.origin}/auth/callback?next=${encodeURIComponent(sanitizeNext(next) ?? "/")}`;
 }
 
 export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -51,6 +47,8 @@ const SESSION_EXPIRED = "Your session has expired. Please start again.";
 const BAD_CREDENTIALS = "Incorrect email or password.";
 const UNCONFIRMED = "Please confirm your email address first. Check your inbox for the link.";
 const EMAIL_TAKEN = "An account with this email already exists.";
+/** Supabase's built-in mailer only reaches the project's own team (see NEXT_PUBLIC_AUTH_EMAILS). */
+const EMAIL_UNDELIVERABLE = "Locus can’t send email to this address yet.";
 
 /** Supabase Auth error codes → copy. (weak_password is handled separately: it needs `reasons`.) */
 const CODE_MESSAGES: Record<string, string> = {
@@ -62,9 +60,9 @@ const CODE_MESSAGES: Record<string, string> = {
   over_email_send_rate_limit: "Too many emails sent. Please wait a minute before trying again.",
   over_request_rate_limit: "Too many attempts. Please wait a minute and try again.",
   signup_disabled: "New sign-ups are currently disabled.",
-  email_provider_disabled: "Email sign-in is disabled. Use another sign-in method.",
+  email_provider_disabled: "Email and password sign-in is currently turned off. Please try again later.",
   email_address_invalid: "Enter a valid email address.",
-  email_address_not_authorized: "Email delivery isn’t set up for this app yet, so we can’t email this address. Log in with your password instead.",
+  email_address_not_authorized: EMAIL_UNDELIVERABLE,
   otp_expired: "That link has expired. Request a new one.",
   flow_state_not_found: SAME_BROWSER,
   flow_state_expired: SAME_BROWSER,
@@ -80,17 +78,20 @@ const CODE_MESSAGES: Record<string, string> = {
 };
 
 /**
- * Codes that only reach /login through a redirect (?error=<code>) from the auth callback /
- * confirm routes or the identity provider — never from an in-form request.
+ * Codes that only reach /login through a redirect (?error=<code>) from the /auth/callback and
+ * /auth/confirm routes — never from an in-form request. Every value is fixed copy.
  */
 const LINK_CODES: Record<string, string> = {
-  missing_code: LINK_ERROR,
-  invalid_link: LINK_ERROR,
+  link_expired: "That link has expired or was already used. Request a new one, or log in with your password.",
+  auth_failed: "We couldn’t sign you in with that link. Open it in the same browser you requested it from, or log in with your password.",
+  missing_code: "That link is incomplete. Open it directly from the email, or log in with your password.",
+  invalid_link: "That link isn’t valid. It may be incomplete or already used. Request a new one, or log in with your password.",
   unknown: LINK_ERROR,
   otp_disabled: LINK_ERROR,
   bad_oauth_state: LINK_ERROR,
   bad_oauth_callback: LINK_ERROR,
-  access_denied: "Sign-in was cancelled. Try again.",
+  // Supabase's verify endpoint reports a bad or expired email link as access_denied
+  access_denied: LINK_ERROR,
 };
 
 const AUTH_CODE_RE = /^[a-z_]{1,64}$/;
@@ -106,9 +107,11 @@ function messagePattern(msg: string): string | null {
   if (/failed to fetch|networkerror|network request failed|load failed/i.test(msg)) return "Can’t reach the server. Check your connection and try again.";
   if (/invalid login credentials/i.test(msg)) return BAD_CREDENTIALS;
   if (/user already registered/i.test(msg)) return EMAIL_TAKEN;
+  if (/email address not authorized/i.test(msg)) return EMAIL_UNDELIVERABLE;
   if (/email not confirmed/i.test(msg)) return UNCONFIRMED;
   if (/auth session missing/i.test(msg)) return SESSION_EXPIRED;
   if (/code verifier|both auth code and code verifier/i.test(msg)) return SAME_BROWSER;
+  if (/missing auth code/i.test(msg)) return LINK_CODES.missing_code;
   if (/(link|token).*(invalid|expired)|(invalid|expired).*(link|token)/i.test(msg)) return LINK_ERROR;
   return null;
 }
@@ -119,6 +122,12 @@ export function authErrorMessage(err: unknown): string {
   const msg = (e.message ?? "").trim();
   if (e.code === "weak_password") return weakPassword(e.reasons, msg);
   return lookup(CODE_MESSAGES, e.code) ?? messagePattern(msg) ?? (msg || "Something went wrong. Please try again.");
+}
+
+/** True when Supabase refused to email this address (its built-in mailer only reaches the project team). */
+export function isEmailUndeliverable(err: unknown): boolean {
+  const e = (err ?? {}) as AuthLikeError;
+  return e.code === "email_address_not_authorized" || /email address not authorized/i.test(e.message ?? "");
 }
 
 /**

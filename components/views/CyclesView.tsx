@@ -4,10 +4,11 @@
 import { useMemo, useState } from "react";
 import { ChevronDown, Plus, RefreshCw } from "lucide-react";
 import { toast } from "@/lib/ui";
-import { cyclePhase, useTeamByKey, useTeamCycles } from "@/lib/model";
+import { cyclePhase, useTeamCycles } from "@/lib/model";
 import { createNextCycle } from "@/lib/sync/actions";
 import { ViewHeader } from "@/components/app/Header";
 import NotFound from "@/components/app/NotFound";
+import { useRoutedTeam } from "@/components/issues/shared";
 import { Button, EmptyState, Tooltip } from "@/components/primitives/controls";
 import { TeamIcon } from "@/components/primitives/icons";
 import CycleRow from "@/components/cycles/CycleRow";
@@ -17,7 +18,8 @@ import { useNow } from "@/components/inbox/hooks";
 import type { Cycle, Issue, Team } from "@/lib/types";
 
 export default function CyclesView({ teamKey }: { teamKey: string }) {
-  const team = useTeamByKey(teamKey);
+  // pinned by id: a key rename while open swaps the URL instead of flipping to "not found"
+  const team = useRoutedTeam(teamKey, (key) => ({ kind: "team-cycles", key }));
   if (!team) return <NotFound what="team" />;
   return <TeamCycles team={team} />;
 }

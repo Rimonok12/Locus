@@ -6,20 +6,23 @@ import { Check, Layers, Pencil, X } from "lucide-react";
 import { updateView } from "@/lib/sync/actions";
 import type { View } from "@/lib/types";
 import { useFilterText } from "./filterText";
+import { viewFilters } from "./viewData";
 
 export default function BaseFilters({ view, canEdit }: { view: View; canEdit: boolean }) {
   const { describe } = useFilterText();
   const [editing, setEditing] = useState(false);
-  if (!view.filters.length) return null;
+  const filters = viewFilters(view);
+  if (!filters.length) return null;
 
-  const remove = (id: string) => updateView(view.id, { filters: view.filters.filter((f) => f.id !== id) });
+  // writes back the cleaned list, so removing a chip also drops any malformed stored entries
+  const remove = (id: string) => updateView(view.id, { filters: filters.filter((f) => f.id !== id) });
 
   return (
     <div className="flex min-h-10 flex-wrap items-center gap-1.5 border-t border-line px-3 py-1.5 md:px-4">
       <span className="mr-0.5 flex shrink-0 items-center gap-1.5 text-[12px] text-faint">
         <Layers size={12} />View filters
       </span>
-      {view.filters.map((f) => (
+      {filters.map((f) => (
         <span
           key={f.id}
           className={`inline-flex h-8 max-w-full items-center gap-0.5 rounded-md border bg-surface pl-2 text-[12px] text-dim sm:h-6 ${

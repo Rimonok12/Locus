@@ -2,7 +2,7 @@
 /* ─── Locus · issue detail helpers shared by the page and the peek panel ─── */
 
 import { useEffect, useMemo } from "react";
-import { useSync, loadIssueDetails } from "@/lib/sync/store";
+import { useSync, watchIssueDetails } from "@/lib/sync/store";
 import { useUI } from "@/lib/ui";
 import { displayName } from "@/lib/model";
 import { slugify } from "@/lib/format";
@@ -44,13 +44,25 @@ export function isBareEscape(e: KeyboardEvent): boolean {
     && !isTypingTarget(e.target) && !overlayOpen() && !justDismissed();
 }
 
-/** Fetch comments / history / subscribers / reactions for an issue; returns whether they are loaded. */
+/**
+ * Fetch comments / history / subscribers / reactions for an issue and keep them fresh while mounted
+ * (refetched after a reconnect or a long stay in the background); returns whether they are loaded.
+ */
 export function useIssueDetails(issueId: string | undefined): boolean {
   const loaded = useSync((s) => (issueId ? Boolean(s.loadedIssues[issueId]) : false));
-  useEffect(() => {
-    if (issueId) void loadIssueDetails(issueId);
-  }, [issueId]);
+  useEffect(() => (issueId ? watchIssueDetails(issueId) : undefined), [issueId]);
   return loaded;
+}
+
+/**
+ * True when `text` is longer than a Postgres `char_length` limit of `max`. JS counts UTF-16 units,
+ * Postgres counts code points, so text that only looks too long (emoji, CJK extension planes) is recounted.
+ */
+export function exceedsChars(text: string, max: number): boolean {
+  if (text.length <= max) return false;
+  let n = 0;
+  for (let i = 0; i < text.length; i += (text.codePointAt(i) ?? 0) > 0xffff ? 2 : 1) if (++n > max) return true;
+  return false;
 }
 
 export function useIsSubscribed(issueId: string): boolean {

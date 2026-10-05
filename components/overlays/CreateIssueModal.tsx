@@ -10,10 +10,12 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { CalendarDays, ChevronDown, ChevronRight, Hexagon, ListTree, RefreshCw, Tag, Triangle, UserRound, X } from "lucide-react";
-import { ui, useUI } from "@/lib/ui";
+import { dismissToast, toast, ui, useUI } from "@/lib/ui";
 import { useSync } from "@/lib/sync/store";
 import { navigate } from "@/lib/router";
-import { cycleName, defaultStateFor, displayName, issueKey, PRIORITY_LABEL, useMyTeams, useTeams } from "@/lib/model";
+import {
+  cycleName, defaultStateFor, displayName, DOC_TOO_LONG, issueKey, MAX_DOC_CHARS, PRIORITY_LABEL, useMyTeams, useTeams,
+} from "@/lib/model";
 import { createIssue } from "@/lib/sync/actions";
 import { dueInfo } from "@/lib/format";
 import { Dropdown, Modal } from "@/components/primitives/overlay";
@@ -39,6 +41,8 @@ function draftKeyNow(): string | null {
   return userId && workspaceId ? `locus:issue-draft:${userId}:${workspaceId}` : null;
 }
 const CREATE_MORE_KEY = "locus:create-more";
+/** issues.title is 1–512 characters in the database (same cap as the issue page's title field) */
+const MAX_TITLE = 512;
 
 interface Props {
   state_id: string | null;
@@ -276,6 +280,13 @@ function Composer({ defaults }: { defaults: Partial<Issue> }) {
     titleRef.current?.focus();
   };
 
+  /** one "can't create" toast at a time, however often ⌘↵ is pressed (or auto-repeats) */
+  const rejection = useRef(0);
+  const reject = (message: string) => {
+    if (rejection.current) dismissToast(rejection.current);
+    rejection.current = toast.error(message);
+  };
+
   const focusDescription = () => {
     const el = descRef.current?.querySelector<HTMLElement>("[contenteditable='true'], textarea");
     el?.focus();
@@ -285,6 +296,17 @@ function Composer({ defaults }: { defaults: Partial<Issue> }) {
     const t = title.trim();
     if (!t || !team) { titleRef.current?.focus(); return; }
     if (submitting.current) return;
+    // the database would reject these: keep the modal (and the text) and say why
+    if (t.length > MAX_TITLE) {
+      reject(`Titles can be up to ${MAX_TITLE} characters — move the rest into the description.`);
+      titleRef.current?.focus();
+      return;
+    }
+    if (description.length > MAX_DOC_CHARS) {
+      reject(DOC_TOO_LONG);
+      focusDescription();
+      return;
+    }
     submitting.current = true;
     setTimeout(() => { submitting.current = false; }, 0);
 
@@ -419,6 +441,7 @@ function Composer({ defaults }: { defaults: Partial<Issue> }) {
             if (e.metaKey || e.ctrlKey) submit();
             else focusDescription();
           }}
+          maxLength={MAX_TITLE}
           placeholder="Issue title"
           aria-label="Issue title"
           className="w-full bg-transparent text-[18px] font-medium leading-7 text-ink outline-none placeholder:text-faint"

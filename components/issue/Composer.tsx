@@ -6,8 +6,11 @@ import { modKey } from "@/lib/format";
 import { toast } from "@/lib/ui";
 import { Button } from "@/components/primitives/controls";
 import Editor, { isEmptyHtml } from "@/components/editor/Editor";
+import { exceedsChars } from "./shared";
 
-const MAX_BODY = 50000;
+/** comments.body is capped by the database (char_length between 1 and 50,000) */
+export const MAX_COMMENT_CHARS = 50_000;
+export const COMMENT_TOO_LONG = "Comments are limited to 50,000 characters — shorten it or attach large logs as files.";
 
 function readDraft(key: string | undefined): string {
   if (!key) return "";
@@ -52,8 +55,8 @@ export function Composer({
   const submit = async () => {
     const body = htmlRef.current;
     if (isEmptyHtml(body)) return;
-    if (body.length > MAX_BODY) {
-      toast.error("Comments are limited to 50,000 characters.");
+    if (exceedsChars(body, MAX_COMMENT_CHARS)) {
+      toast.error(COMMENT_TOO_LONG);
       return;
     }
     // optimistic: clear now (remount the editor so it empties even while focused)

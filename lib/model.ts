@@ -4,6 +4,7 @@
 import { useMemo } from "react";
 import { useSync, type SyncState } from "@/lib/sync/store";
 import { useUI } from "@/lib/ui";
+import { FILTER_FIELDS, sanitizeDisplay, sanitizeFilters } from "@/lib/view-shape";
 import type {
   Cycle, DisplayOptions, DisplayProperty, Filter, Grouping, Health, Issue, Label, Ordering, Priority,
   Profile, Project, ProjectStatus, StateType, Team, WorkflowState, WorkspaceMember,
@@ -234,6 +235,8 @@ function addDays(iso: string, n: number) {
   return d.toISOString().slice(0, 10);
 }
 
+const KNOWN_FIELDS = new Set<string>(FILTER_FIELDS);
+
 function filterValuesOf(issue: Issue, f: Filter, ctx: QueryCtx): (string | null)[] {
   switch (f.field) {
     case "status": return [issue.state_id];
@@ -255,15 +258,19 @@ function filterValuesOf(issue: Issue, f: Filter, ctx: QueryCtx): (string | null)
       if (d >= ctx.today && d <= addDays(ctx.today, 7)) out.push("week");
       return out.length ? out : ["later"];
     }
+    default: return [null];
   }
 }
 
+/** Filters come from shared views and stored prefs: a malformed one (unknown field, no values) is ignored. */
 export function matchesFilter(issue: Issue, f: Filter, ctx: QueryCtx): boolean {
-  if (!f.values.length) return true;
-  const wanted = new Set(f.values.map((v) => (v === "me" ? ctx.me : v === "none" ? null : v)));
+  if (!f || typeof f !== "object" || !KNOWN_FIELDS.has(f.field)) return true;
+  const values = Array.isArray(f.values) ? f.values : [];
+  if (!values.length) return true;
+  const wanted = new Set(values.map((v) => (v === "me" ? ctx.me : v === "none" ? null : v)));
   const have = filterValuesOf(issue, f, ctx);
   // "current" cycle token
-  if (f.field === "cycle" && f.values.includes("current")) {
+  if (f.field === "cycle" && values.includes("current")) {
     const cyc = issue.cycle_id ? ctx.cycles[issue.cycle_id] : undefined;
     if (cyc && cyclePhase(cyc, ctx.today) === "current") return f.op === "is";
   }
@@ -272,7 +279,7 @@ export function matchesFilter(issue: Issue, f: Filter, ctx: QueryCtx): boolean {
 }
 
 export const applyFilters = (issues: Issue[], filters: Filter[], ctx: QueryCtx) =>
-  filters.length ? issues.filter((i) => filters.every((f) => matchesFilter(i, f, ctx))) : issues;
+  Array.isArray(filters) && filters.length ? issues.filter((i) => filters.every((f) => matchesFilter(i, f, ctx))) : issues;
 
 export function applyCompletedWindow(issues: Issue[], window: DisplayOptions["completed"], ctx: QueryCtx) {
   if (window === "all") return issues;
@@ -423,7 +430,9 @@ export const DEFAULT_PROPERTIES: Record<DisplayProperty, boolean> = {
   estimate: true, due: true, created: true, updated: false, milestone: false, subIssues: true,
 };
 
+/** Display options with defaults filled in; unknown or invalid values (shared views, old prefs) fall back to them. */
 export function defaultDisplay(patch: Partial<DisplayOptions> = {}): DisplayOptions {
+  const safe = sanitizeDisplay(patch);
   return {
     layout: "list",
     grouping: "status",
@@ -431,8 +440,8 @@ export function defaultDisplay(patch: Partial<DisplayOptions> = {}): DisplayOpti
     completed: "all",
     showEmptyGroups: false,
     showSubIssues: true,
-    ...patch,
-    properties: { ...DEFAULT_PROPERTIES, ...(patch.properties ?? {}) },
+    ...safe,
+    properties: { ...DEFAULT_PROPERTIES, ...(safe.properties ?? {}) },
   };
 }
 
@@ -476,12 +485,14 @@ export function useIssueQuery(opts: {
   const stored = useUI((u) => u.display[opts.viewKey]);
   const userFilters = useUI((u) => u.filters[opts.viewKey]);
 
-  const display = useMemo(
-    () => defaultDisplay({ ...opts.defaults, ...stored, properties: { ...DEFAULT_PROPERTIES, ...opts.defaults?.properties, ...stored?.properties } }),
+  const display = useMemo(() => {
+    const defaults = sanitizeDisplay(opts.defaults);
+    const prefs = sanitizeDisplay(stored);
+    return defaultDisplay({ ...defaults, ...prefs, properties: { ...DEFAULT_PROPERTIES, ...defaults.properties, ...prefs.properties } });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [stored, opts.viewKey, JSON.stringify(opts.defaults)],
-  );
-  const filters = useMemo(() => [...(opts.baseFilters ?? []), ...(userFilters ?? [])],
+  }, [stored, opts.viewKey, JSON.stringify(opts.defaults)]);
+  // base filters come from shared views (any member can write them): only well-formed ones apply
+  const filters = useMemo(() => [...sanitizeFilters(opts.baseFilters), ...sanitizeFilters(userFilters)],
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [userFilters, opts.viewKey, JSON.stringify(opts.baseFilters)]);
 

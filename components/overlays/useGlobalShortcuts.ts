@@ -18,6 +18,8 @@ import {
 import type { Team } from "@/lib/types";
 
 const CHORD_MS = 1200;
+/** the docked sidebar's breakpoint (Tailwind `md`); below it the sidebar is the navigation drawer */
+const WIDE = "(min-width: 768px)";
 
 const PICKERS: Record<string, PickerKind> = { s: "status", p: "priority", a: "assignee", l: "labels" };
 const SHIFT_PICKERS: Record<string, PickerKind> = { p: "project", c: "cycle", e: "estimate", d: "due", m: "team" };
@@ -43,7 +45,7 @@ function overlayActive(u: ReturnType<typeof useUI.getState>): boolean {
 
 /** "[" — collapse/expand the sidebar; below md (no docked sidebar) it opens the navigation drawer. */
 function toggleSidebar() {
-  if (window.matchMedia("(min-width: 768px)").matches) ui.toggleSidebar();
+  if (window.matchMedia(WIDE).matches) ui.toggleSidebar();
   else ui.setMobileNav(true);
 }
 
@@ -112,15 +114,27 @@ export function useGlobalShortcuts() {
         return;
       }
 
-      // fields keep their keys; a view that handled the key (capture phase) wins
-      if (typing || e.defaultPrevented) { chordAt = 0; return; }
+      // a view that handled the key (capture phase), a menu or dialog that closed on Escape, wins
+      if (e.defaultPrevented) { chordAt = 0; return; }
       const u = useUI.getState();
 
-      /* Escape: mobile drawer → selection → peek (dialogs and menus close themselves) */
+      /* Escape closes the mobile drawer. It sits above everything on the page, so it goes first:
+         ahead of overlayActive() (anyOverlayOpen() is true while the drawer is open) and ahead of
+         the typing check (focus can be left in a field behind the drawer's backdrop). */
+      if (key === "Escape" && u.mobileNavOpen && !mod && !e.altKey && !e.shiftKey) {
+        chordAt = 0;
+        e.preventDefault();
+        ui.setMobileNav(false);
+        return;
+      }
+
+      // fields keep their keys
+      if (typing) { chordAt = 0; return; }
+
+      /* Escape: selection → peek (dialogs, menus and the drawer are handled above / close themselves) */
       if (key === "Escape") {
         chordAt = 0;
         if (mod || e.altKey || e.shiftKey) return;
-        if (u.mobileNavOpen) { e.preventDefault(); ui.setMobileNav(false); return; }
         if (overlayActive(u)) return;
         if (u.selected.length) { e.preventDefault(); ui.clearSelection(); return; }
         if (u.peekIssueId) { e.preventDefault(); ui.peek(null); }
@@ -178,7 +192,19 @@ export function useGlobalShortcuts() {
       else toggleAssignToMe(ids);
     };
 
+    /* The drawer is CSS-hidden at md+, but while mobileNavOpen stays true anyOverlayOpen() keeps
+       every shortcut stood down. Growing the window past the breakpoint (rotation, resize, split
+       view) therefore closes it, so the keyboard never goes dead behind an invisible drawer. */
+    const wide = window.matchMedia(WIDE);
+    const onWide = () => {
+      if (wide.matches && useUI.getState().mobileNavOpen) ui.setMobileNav(false);
+    };
+
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    wide.addEventListener("change", onWide);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      wide.removeEventListener("change", onWide);
+    };
   }, []);
 }

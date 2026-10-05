@@ -8,7 +8,9 @@ import { toast, ui } from "@/lib/ui";
 import { useIsAdmin, useMeId, useWorkspace } from "@/lib/model";
 import { deleteWorkspace, leaveWorkspace, updateWorkspace, uploadWorkspaceLogo } from "@/lib/sync/actions";
 import { Button, Spinner } from "@/components/primitives/controls";
-import { AdminNote, Card, Row, Section, SettingsPage, TextField, TypeToConfirm, acceptImage, plural } from "./kit";
+import {
+  AdminNote, Card, IMAGE_ACCEPT, IMAGE_FORMATS_HINT, Row, Section, SettingsPage, TextField, TypeToConfirm, acceptImage, plural,
+} from "./kit";
 
 const SLUG = /^[a-z0-9][a-z0-9-]{1,46}[a-z0-9]$/;
 const RESERVED = new Set([
@@ -62,7 +64,7 @@ export default function WorkspaceSettings() {
 
       <Section>
         <Card>
-          <Row label="Logo" description="Recommended size 256×256. PNG, JPG or SVG up to 2 MB.">
+          <Row label="Logo" description={`Recommended size 256×256. ${IMAGE_FORMATS_HINT}`}>
             <button
               type="button"
               disabled={!isAdmin || uploading}
@@ -104,7 +106,7 @@ export default function WorkspaceSettings() {
                     Remove
                   </Button>
                 )}
-                <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onFile} />
+                <input ref={fileRef} type="file" accept={IMAGE_ACCEPT} className="hidden" onChange={onFile} />
               </>
             )}
           </Row>

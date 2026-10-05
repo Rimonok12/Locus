@@ -3,6 +3,8 @@
    Keyboard (while no overlay is open and focus isn't in a text field):
      J / K  move · Enter open full page · E / Backspace archive · U read toggle
      H snooze menu (unsnooze on the Snoozed tab) · Esc clear selection
+   Selecting or opening a snoozed notification never marks it read: it has to
+   come back as new when its snooze ends.
    One bubble-phase window listener: anything inside the page that handles a
    key first (fields, menus, inline forms) marks it defaultPrevented and wins;
    Escape defers to the global handler by state (selection / peek / drawer),
@@ -24,7 +26,7 @@ import { ActionMenu } from "@/components/primitives/SelectMenu";
 import InboxRow from "@/components/inbox/InboxRow";
 import InboxDetail from "@/components/inbox/InboxDetail";
 import SnoozeMenu from "@/components/inbox/SnoozeMenu";
-import { isSnoozed, routeForNotification, type InboxTab } from "@/components/inbox/util";
+import { isSnoozed, routeForNotification, snoozedUntilLabel, type InboxTab } from "@/components/inbox/util";
 import { isActivatable, isTypingTarget, overlayOpen, useMediaQuery, useNow } from "@/components/inbox/hooks";
 import type { Notification } from "@/lib/types";
 
@@ -97,12 +99,15 @@ export default function InboxView() {
   const live = useRef({ list, selectedId, desktop, tab });
   live.current = { list, selectedId, desktop, tab };
 
+  /** Snoozed reminders stay unread while you look at them, so they resurface as new when they wake. */
+  const staysUnread = useCallback((n: Notification | undefined) => !n || live.current.tab === "snoozed" || isSnoozed(n), []);
+
   const select = useCallback((id: string | null) => {
     setSelectedId(id);
-    if (!id) return;
+    if (!id || staysUnread(useSync.getState().notifications[id])) return;
     setKept((k) => (k.has(id) ? k : new Set(k).add(id)));
     markNotificationsRead([id]);
-  }, []);
+  }, [staysUnread]);
 
   /** When `ids` leave the current list, move the selection to the row that takes their place. */
   const advancePast = useCallback((ids: string[]) => {
@@ -124,15 +129,35 @@ export default function InboxView() {
 
   const snoozeUntil = useCallback((ids: string[], until: Date) => {
     if (!ids.length) return;
+    // snoozing clears read_at; undo puts the read state back (one write after the other, never racing)
+    const notes = useSync.getState().notifications;
+    const wasRead = ids.filter((id) => notes[id]?.read_at);
     if (live.current.tab !== "snoozed") advancePast(ids);
     void snoozeNotifications(ids, until).then((ok) => {
-      if (ok) toast(`Snoozed until ${until.toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" })}`);
+      if (!ok) return; // reverted + toasted by the store
+      const what = ids.length === 1 ? "Snoozed" : `Snoozed ${plural(ids.length)}`;
+      toast(`${what} until ${snoozedUntilLabel(until.toISOString())}`, {
+        label: "Undo",
+        run: () => {
+          void unsnoozeNotifications(ids).then((back) => { if (back) markNotificationsRead(wasRead); });
+        },
+      });
     });
   }, [advancePast]);
 
   const unsnooze = useCallback((id: string) => {
+    const prev = useSync.getState().notifications[id]?.snoozed_until ?? null;
     if (live.current.tab === "snoozed") advancePast([id]);
-    void unsnoozeNotifications([id]);
+    void unsnoozeNotifications([id]).then((ok) => {
+      if (!ok) return;
+      toast("Moved back to your inbox", prev && Date.parse(prev) > Date.now() ? {
+        label: "Undo",
+        run: () => {
+          // the original wake time may have passed while the toast was up
+          if (Date.parse(prev) > Date.now()) void snoozeNotifications([id], new Date(prev));
+        },
+      } : undefined);
+    });
   }, [advancePast]);
 
   const toggleRead = useCallback((id: string) => {
@@ -144,10 +169,10 @@ export default function InboxView() {
 
   const openFull = useCallback((n: Notification) => {
     const route = routeForNotification(n, useSync.getState());
-    markNotificationsRead([n.id]);
+    if (!staysUnread(n)) markNotificationsRead([n.id]);
     if (route) navigate(route);
     else toast.error("This item is no longer available.");
-  }, []);
+  }, [staysUnread]);
 
   const onRowSelect = useCallback((id: string) => {
     if (live.current.desktop) { select(id); return; }

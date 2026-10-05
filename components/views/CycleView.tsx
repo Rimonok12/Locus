@@ -4,12 +4,13 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import { ArrowRight, CircleCheck, Link2, MoreHorizontal, Pencil, Plus, RefreshCw, Star, Trash2 } from "lucide-react";
 import { useSync } from "@/lib/sync/store";
-import { cyclePhase, useIssueQuery, useTeamByKey, useTeamCycles } from "@/lib/model";
+import { cyclePhase, useIssueQuery, useTeamCycles } from "@/lib/model";
 import { copyText, createNextCycle, toggleFavorite } from "@/lib/sync/actions";
 import { hrefFor, linkProps, navigate } from "@/lib/router";
 import { ViewHeader } from "@/components/app/Header";
 import NotFound from "@/components/app/NotFound";
 import IssuesSurface, { DisplayMenu, FilterBar, FilterButton } from "@/components/issues/IssuesSurface";
+import { useRoutedTeam } from "@/components/issues/shared";
 import { Button, EmptyState, IconButton } from "@/components/primitives/controls";
 import { Dropdown } from "@/components/primitives/overlay";
 import { ActionMenu } from "@/components/primitives/SelectMenu";
@@ -24,7 +25,8 @@ import type { Crumb } from "@/components/app/Header";
 import type { Cycle, Issue, Team } from "@/lib/types";
 
 export default function CycleView({ teamKey, number }: { teamKey: string; number: number | "current" }) {
-  const team = useTeamByKey(teamKey);
+  // pinned by id: a key rename while open swaps the URL instead of flipping to "not found"
+  const team = useRoutedTeam(teamKey, (key) => ({ kind: "cycle", key, number }));
   const cycles = useTeamCycles(team?.id);
   if (!team) return <NotFound what="team" />;
   const cycle = number === "current"

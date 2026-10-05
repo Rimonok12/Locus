@@ -18,6 +18,7 @@ import { TeamIcon } from "@/components/primitives/icons";
 import BaseFilters from "@/components/saved-views/BaseFilters";
 import { PersonalBadge, RenameInput } from "@/components/saved-views/ViewRow";
 import { FavoriteButton, confirmDeleteView, duplicateView, useCanEditView, useIsFavorite } from "@/components/saved-views/viewActions";
+import { viewDisplay, viewFilters } from "@/components/saved-views/viewData";
 import type { DisplayOptions, Issue, View } from "@/lib/types";
 
 export default function SavedView({ id }: { id: string }) {
@@ -45,14 +46,17 @@ function SavedViewBody({ view }: { view: View }) {
   const userDisplay = useUI((u) => u.display[viewKey]);
   const [renaming, setRenaming] = useState(false);
   const [saving, setSaving] = useState(false);
+  // stored jsonb is untrusted in shape; both are cached per stored value, so stable across renders
+  const baseFilters = viewFilters(view);
+  const baseDisplay = viewDisplay(view);
 
   const teamId = view.team_id ?? undefined;
   const scope = useCallback((i: Issue) => !teamId || i.team_id === teamId, [teamId]);
   const query = useIssueQuery({
     viewKey,
     scope,
-    baseFilters: view.filters,
-    defaults: view.display,
+    baseFilters,
+    defaults: baseDisplay,
     teamId,
     deps: [scope],
   });
@@ -60,7 +64,7 @@ function SavedViewBody({ view }: { view: View }) {
   /** only count display keys that actually differ from what the view saved */
   const displayChanged = useMemo(() => {
     if (!userDisplay) return false;
-    const saved = defaultDisplay(view.display);
+    const saved = defaultDisplay(baseDisplay);
     return (Object.keys(userDisplay) as (keyof DisplayOptions)[]).some((k) => {
       if (k === "properties") {
         const props = userDisplay.properties ?? {};
@@ -68,7 +72,7 @@ function SavedViewBody({ view }: { view: View }) {
       }
       return JSON.stringify(userDisplay[k]) !== JSON.stringify(saved[k]);
     });
-  }, [userDisplay, view.display]);
+  }, [userDisplay, baseDisplay]);
   const filtersChanged = (userFilters?.length ?? 0) > 0;
   const dirty = filtersChanged || displayChanged;
 
@@ -81,8 +85,8 @@ function SavedViewBody({ view }: { view: View }) {
     const prevFilters = userFilters ?? [];
     const prevDisplay = userDisplay;
     const patch = {
-      filters: [...view.filters, ...prevFilters],
-      display: mergeDisplay(view.display, prevDisplay),
+      filters: [...baseFilters, ...prevFilters],
+      display: mergeDisplay(baseDisplay, prevDisplay),
     };
     setSaving(true);
     discard(); // optimistic: the view itself now carries the changes
@@ -99,8 +103,8 @@ function SavedViewBody({ view }: { view: View }) {
   const saveAsNew = async () => {
     setSaving(true);
     const copy = await duplicateView(view, {
-      filters: [...view.filters, ...(userFilters ?? [])],
-      display: mergeDisplay(view.display, userDisplay),
+      filters: [...baseFilters, ...(userFilters ?? [])],
+      display: mergeDisplay(baseDisplay, userDisplay),
       shared: false,
     });
     setSaving(false);
