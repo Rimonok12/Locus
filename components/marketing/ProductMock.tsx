@@ -124,7 +124,7 @@ function MockRowView({ row, group }: { row: MockRow; group: MockGroup }) {
     >
       {row.focused && <span className="absolute inset-y-0 left-0 w-[2px] bg-accent" aria-hidden />}
       <PriorityIcon priority={row.priority} className={row.priority === 0 ? "shrink-0 text-faint" : "shrink-0 text-dim"} />
-      <span className="hidden w-[54px] shrink-0 tabular-nums text-faint sm:block">{row.id}</span>
+      <span className="hidden w-[60px] shrink-0 whitespace-nowrap tabular-nums text-faint sm:block">{row.id}</span>
       <StateIcon type={group.type} color={group.color} fraction={group.fraction} />
       <span className="min-w-0 flex-1 truncate text-ink">{row.title}</span>
       <span className="hidden shrink-0 items-center gap-1 md:flex">
