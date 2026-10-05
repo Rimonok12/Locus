@@ -56,7 +56,7 @@ const realtimeVisual = (
       <MockAvatar person={{ initials: "SN", hue: 300 }} size={18} />
       <span className="min-w-0 flex-1 truncate text-dim">
         <span className="font-medium text-ink">Sam</span> moved ENG-198 to{" "}
-        <span className="inline-flex translate-y-[2px]"><StateIcon type="completed" color="#5e6ad2" size={12} /></span>{" "}
+        <span className="inline-flex translate-y-[2px]"><StateIcon type="completed" color="#3f72af" size={12} /></span>{" "}
         <span className="text-ink">Done</span>
       </span>
       <span className="relative flex h-2 w-2 shrink-0" aria-hidden>

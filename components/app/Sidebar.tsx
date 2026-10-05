@@ -158,7 +158,7 @@ function WorkspaceMenu() {
             // eslint-disable-next-line @next/next/no-img-element
             <img src={ws.logo_url} alt="" className="h-5 w-5 shrink-0 rounded-[5px] object-cover" />
           ) : (
-            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[5px] bg-accent text-[11px] font-semibold text-white">
+            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[5px] bg-accent text-[11px] font-semibold text-accent-ink">
               {ws?.name.slice(0, 1).toUpperCase()}
             </span>
           )}

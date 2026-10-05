@@ -8,8 +8,8 @@
 
 import { useEffect } from "react";
 
-const LIGHT = "--bg:#fcfcfd;--surface:#fff;--line:#d9d9e0;--ink:#1d1e22;--dim:#5b5e66;--faint:#8d9099;--accent:#5e6ad2;--accent-hover:#5059c4;--danger:#e5484d;--glow:rgba(94,106,210,.12)";
-const DARK = "--bg:#141518;--surface:#1c1d21;--line:#34363c;--ink:#eeeff1;--dim:#a8abb3;--faint:#6f727a;--accent:#6e79d6;--accent-hover:#7d87dc;--danger:#eb5757;--glow:rgba(110,121,214,.18)";
+const LIGHT = "--bg:#f9f7f7;--surface:#fff;--line:#c9d3e6;--ink:#112d4e;--dim:#51688c;--faint:#7489ab;--accent:#3f72af;--accent-hover:#36649c;--danger:#e5484d;--glow:rgba(63,114,175,.12)";
+const DARK = "--bg:#0c1a2c;--surface:#112d4e;--line:#2e5583;--ink:#f9f7f7;--dim:#aabdd8;--faint:#7390b5;--accent:#6ea2dd;--accent-hover:#82b1e4;--danger:#f06a6e;--glow:rgba(110,162,221,.18)";
 
 const CSS = `
 :root{${LIGHT};color-scheme:light}

@@ -211,7 +211,7 @@ export async function createProject(input: Partial<Project> & { name: string }) 
   const s = S();
   const min = Object.values(s.projects).reduce((m, p) => Math.min(m, p.sort_order), 0);
   const p = await insert("projects", {
-    status: "planned", priority: 0, member_ids: [], team_ids: [], summary: "", description: "", color: "#5e6ad2",
+    status: "planned", priority: 0, member_ids: [], team_ids: [], summary: "", description: "", color: "#3f72af",
     lead_id: s.userId, sort_order: min - 1, ...input,
   }, "Couldn't create project");
   if (p) toast.success(`Created project ${p.name}`, { label: "Open", run: () => navigate({ kind: "project", id: p.id, tab: "overview" }) });
@@ -303,7 +303,7 @@ export async function deleteLabel(id: string) {
 
 /* ═══ teams & workflow ═══ */
 
-export async function createTeam(name: string, key: string, color = "#5e6ad2"): Promise<Team | null> {
+export async function createTeam(name: string, key: string, color = "#3f72af"): Promise<Team | null> {
   const team = await rpc<Team>("create_team", { p_workspace_id: S().workspaceId, p_name: name, p_key: key, p_color: color }, "Couldn't create team");
   if (!team) return null;
   const sb = supabase();
@@ -353,7 +353,7 @@ export async function deleteState(id: string, replacementId: string) {
 /* ═══ views & favorites ═══ */
 
 export const createView = (input: Partial<View> & { name: string }) =>
-  insert("views", { filters: [], display: {}, shared: true, color: "#5e6ad2", owner_id: S().userId, ...input }, "Couldn't save view");
+  insert("views", { filters: [], display: {}, shared: true, color: "#3f72af", owner_id: S().userId, ...input }, "Couldn't save view");
 export const updateView = (id: string, patch: Partial<View>) => update("views", id, patch, "Couldn't update view");
 export const deleteView = (id: string) => remove("views", id, "Couldn't delete view");
 

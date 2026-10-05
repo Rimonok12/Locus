@@ -37,7 +37,7 @@ function CreateProjectForm({ onClose, defaultTeamId }: { onClose: () => void; de
   const [summary, setSummary] = useState("");
   const [description, setDescription] = useState("");
   const [icon, setIcon] = useState<string | null>(null);
-  const [color, setColor] = useState("#5e6ad2");
+  const [color, setColor] = useState("#3f72af");
   const [fields, setFields] = useState<ProjectFields>(() => ({
     status: "planned",
     priority: 0,

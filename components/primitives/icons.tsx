@@ -107,7 +107,7 @@ const PROJECT_STATE: Record<ProjectStatus, { type: StateType; color: string; fra
   planned: { type: "unstarted", color: "#a3a7b0" },
   started: { type: "started", color: "#f2c94c", fraction: 0.5 },
   paused: { type: "started", color: "#95a2b3", fraction: 0.25 },
-  completed: { type: "completed", color: "#5e6ad2" },
+  completed: { type: "completed", color: "#3f72af" },
   canceled: { type: "canceled", color: "#95a2b3" },
 };
 
@@ -167,9 +167,10 @@ export function ProgressRing({ value, size = 14, color = "var(--accent)" }: { va
 export function LocusMark({ size = 20 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden>
-      <rect width="24" height="24" rx="6" fill="var(--accent)" />
-      <circle cx="12" cy="12" r="6.2" fill="none" stroke="#fff" strokeWidth="2" />
-      <circle cx="12" cy="12" r="2.2" fill="#fff" />
+      {/* brand mark (matches public/favicon.svg): navy tile, blue ring, light core */}
+      <rect x="0.5" y="0.5" width="23" height="23" rx="5.5" fill="#112d4e" stroke="var(--line-strong)" strokeWidth="1" />
+      <circle cx="12" cy="12" r="5.6" fill="none" stroke="#3f72af" strokeWidth="2.2" />
+      <circle cx="12" cy="12" r="1.9" fill="#f9f7f7" />
     </svg>
   );
 }

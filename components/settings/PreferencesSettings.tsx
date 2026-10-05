@@ -8,9 +8,9 @@ import { Card, Row, Section, SettingsPage } from "./kit";
 
 /* Fixed palettes: a preview must show its own theme no matter which one is active. */
 interface Palette { canvas: string; sidebar: string; line: string; bar: string; strong: string; accent: string }
-const LIGHT: Palette = { canvas: "#fcfcfd", sidebar: "#f5f5f7", line: "#e9e9ee", bar: "#dcdce3", strong: "#b9bbc4", accent: "#5e6ad2" };
-const DARK: Palette = { canvas: "#141518", sidebar: "#0f1012", line: "#26272c", bar: "#2c2e34", strong: "#4a4d55", accent: "#6e79d6" };
-const DOTS = ["#f2c94c", "#5e6ad2", "#e2e2e2", "#4cb782"];
+const LIGHT: Palette = { canvas: "#f9f7f7", sidebar: "#f1f3f9", line: "#dbe2ef", bar: "#dbe2ef", strong: "#a9b8d3", accent: "#3f72af" };
+const DARK: Palette = { canvas: "#0c1a2c", sidebar: "#091523", line: "#24466e", bar: "#16365c", strong: "#2e5583", accent: "#6ea2dd" };
+const DOTS = ["#f2c94c", "#3f72af", "#dbe2ef", "#30a46c"];
 
 const THEMES: { value: Theme; label: string; hint: string }[] = [
   { value: "system", label: "System", hint: "Match your device" },

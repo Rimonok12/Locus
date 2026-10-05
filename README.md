@@ -35,7 +35,7 @@
   - Optimistic local writes with automatic rollback.
   - Supabase Realtime pushes every change to all collaborators.
   - The IndexedDB snapshot makes reloads instant.
-- **Light & dark themes**, responsive down to phone width.
+- **Light & dark themes** built on one four-color ramp (`#F9F7F7` · `#DBE2EF` · `#3F72AF` · `#112D4E`, navy in dark mode), responsive down to phone width.
 
 ## Stack
 

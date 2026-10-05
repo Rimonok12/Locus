@@ -25,7 +25,7 @@ export const STATE_TYPE_LABEL: Record<StateType, string> = {
   backlog: "Backlog", unstarted: "Todo", started: "In Progress", completed: "Done", canceled: "Canceled",
 };
 export const STATE_TYPE_COLOR: Record<StateType, string> = {
-  backlog: "#bec2c8", unstarted: "#e2e2e2", started: "#f2c94c", completed: "#5e6ad2", canceled: "#95a2b3",
+  backlog: "#bec2c8", unstarted: "#e2e2e2", started: "#f2c94c", completed: "#3f72af", canceled: "#95a2b3",
 };
 
 export const PRIORITIES: { value: Priority; label: string; shortcut: string }[] = [
@@ -46,7 +46,7 @@ export const PROJECT_STATUSES: { value: ProjectStatus; label: string; color: str
   { value: "planned", label: "Planned", color: "#e2e2e2" },
   { value: "started", label: "In Progress", color: "#f2c94c" },
   { value: "paused", label: "Paused", color: "#95a2b3" },
-  { value: "completed", label: "Completed", color: "#5e6ad2" },
+  { value: "completed", label: "Completed", color: "#3f72af" },
   { value: "canceled", label: "Canceled", color: "#95a2b3" },
 ];
 export const PROJECT_STATUS_LABEL = Object.fromEntries(PROJECT_STATUSES.map((s) => [s.value, s.label])) as Record<ProjectStatus, string>;
@@ -61,7 +61,7 @@ export const HEALTH_COLOR: Record<Health, string> = { on_track: "#26b5ce", at_ri
 
 /** swatches offered by every color picker */
 export const COLORS = [
-  "#5e6ad2", "#26b5ce", "#0f7488", "#4cb782", "#f2c94c", "#f2994a", "#eb5757", "#bb87fc",
+  "#3f72af", "#26b5ce", "#0f7488", "#4cb782", "#f2c94c", "#f2994a", "#eb5757", "#bb87fc",
   "#e93d82", "#4ea7fc", "#95a2b3", "#6e56cf",
 ];
 

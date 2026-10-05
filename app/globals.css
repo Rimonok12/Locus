@@ -2,48 +2,48 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ─── Locus design tokens · light ─── */
 :root {
-  --canvas: #fcfcfd;       /* main content background */
-  --sidebar: #f5f5f7;      /* navigation background */
+  /* Color Hunt "8*4" ramp — #F9F7F7 · #DBE2EF · #3F72AF · #112D4E */
+  --canvas: #f9f7f7;       /* main content background */
+  --sidebar: #f1f3f9;      /* navigation background (a hair cooler than canvas) */
   --surface: #ffffff;      /* cards, menus, modals */
-  --raised: #f7f7f9;       /* group headers, inputs */
-  --line: #e9e9ee;         /* hairlines */
-  --line-strong: #d9d9e0;  /* control borders */
-  --ink: #1d1e22;          /* primary text */
-  --dim: #5b5e66;          /* secondary text */
-  --faint: #8d9099;        /* tertiary text, icons */
-  --accent: #5e6ad2;       /* brand */
-  --accent-hover: #5059c4;
+  --raised: #f4f6fb;       /* group headers, inputs */
+  --line: #dbe2ef;         /* hairlines */
+  --line-strong: #c9d3e6;  /* control borders */
+  --ink: #112d4e;          /* primary text */
+  --dim: #51688c;          /* secondary text */
+  --faint: #7489ab;        /* tertiary text, icons (≥3:1 on canvas) */
+  --accent: #3f72af;       /* brand */
+  --accent-hover: #36649c;
   --accent-ink: #ffffff;
-  --accent-soft: rgba(94, 106, 210, 0.12);
-  --wash: #eeeef2;         /* hover / selected */
+  --accent-soft: rgba(63, 114, 175, 0.12);
+  --wash: #e8edf7;         /* hover / selected */
   --danger: #e5484d;
-  --success: #4cb782;
+  --success: #30a46c;
   --warning: #f2994a;
-  --shadow-color: 220 20% 15%;
+  --shadow-color: 213 64% 19%;
 }
 
-/* ─── dark ─── */
+/* ─── dark · navy family ─── */
 .dark {
-  --canvas: #141518;
-  --sidebar: #0f1012;
-  --surface: #1c1d21;
-  --raised: #191a1e;
-  --line: #26272c;
-  --line-strong: #34363c;
-  --ink: #eeeff1;
-  --dim: #a8abb3;
-  --faint: #6f727a;
-  --accent: #6e79d6;
-  --accent-hover: #7d87dc;
-  --accent-ink: #ffffff;
-  --accent-soft: rgba(110, 121, 214, 0.18);
-  --wash: #24252a;
-  --danger: #eb5757;
+  --canvas: #0c1a2c;
+  --sidebar: #091523;
+  --surface: #112d4e;
+  --raised: #16365c;
+  --line: #24466e;
+  --line-strong: #2e5583;
+  --ink: #f9f7f7;
+  --dim: #aabdd8;
+  --faint: #7390b5;
+  --accent: #6ea2dd;
+  --accent-hover: #82b1e4;
+  --accent-ink: #0c1a2c;
+  --accent-soft: rgba(110, 162, 221, 0.18);
+  --wash: #1b3e68;
+  --danger: #f06a6e;
   --success: #4cb782;
   --warning: #f2994a;
-  --shadow-color: 0 0% 0%;
+  --shadow-color: 215 70% 4%;
 }
 
 html, body { height: 100%; }

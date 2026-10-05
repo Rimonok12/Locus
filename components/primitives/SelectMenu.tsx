@@ -83,7 +83,7 @@ export function SelectMenu({
               className="flex h-9 cursor-pointer select-none items-center gap-2 rounded-md px-2 text-[13px] text-ink sm:h-8"
             >
               {multi && (
-                <span className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[4px] border ${sel.has(item.id) ? "border-accent bg-accent text-white" : "border-line-strong"}`}>
+                <span className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[4px] border ${sel.has(item.id) ? "border-accent bg-accent text-accent-ink" : "border-line-strong"}`}>
                   {sel.has(item.id) && <Check size={10} strokeWidth={3} />}
                 </span>
               )}

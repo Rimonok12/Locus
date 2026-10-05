@@ -166,7 +166,7 @@ export const toast = Object.assign(
 
 /* ─── theme ─── */
 /** Canvas colors (globals.css --canvas); the browser chrome / status bar follows the in-app theme. */
-export const THEME_COLOR = { light: "#fcfcfd", dark: "#141518" } as const;
+export const THEME_COLOR = { light: "#f9f7f7", dark: "#0c1a2c" } as const;
 
 export function applyTheme(theme: Theme) {
   if (typeof document === "undefined") return;
