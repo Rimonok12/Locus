@@ -486,6 +486,11 @@ function flush() {
     if (LAZY.has(c.table) && row.issue_id && !s.loadedIssues[String(row.issue_id)]) continue;
     const key = pkOf(c.table, row);
     if (isPending(c.table, key)) continue;
+    // a late echo of an older write must not overwrite a newer local row
+    if (HAS_UPDATED_AT.has(c.table) && c.type === "UPDATE") {
+      const local = (s[c.table] as unknown as Rec<Record<string, unknown>>)[key];
+      if (local && typeof local.updated_at === "string" && typeof row.updated_at === "string" && row.updated_at < local.updated_at) continue;
+    }
     upserts.set(c.table, [...(upserts.get(c.table) ?? []), row]);
     if (c.table === "workspace_members" && !s.profiles[String(row.user_id)]) fetchProfile(String(row.user_id));
   }

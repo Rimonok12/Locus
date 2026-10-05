@@ -5,7 +5,7 @@ import { supabase } from "@/lib/supabase/client";
 import { insert, mergeRows, dropRows, remove, removeMany, rpc, update, updateMany, useSync, uuid } from "@/lib/sync/store";
 import { toast } from "@/lib/ui";
 import { navigate } from "@/lib/router";
-import { between, defaultStateFor, issueKey } from "@/lib/model";
+import { between, defaultStateFor, issueKey, todayISO } from "@/lib/model";
 import type {
   Cycle, FavoriteKind, Health, Issue, Label, Milestone, Profile, Project, RelationType, Role, StateType, Team,
   View, WorkflowState, Workspace, WorkspaceInvite,
@@ -183,8 +183,13 @@ export async function deleteProject(id: string) {
   }
   return ok;
 }
-export const postProjectUpdate = (projectId: string, health: Health, body: string) =>
-  insert("project_updates", { project_id: projectId, health, body, user_id: S().userId }, "Couldn't post update");
+export async function postProjectUpdate(projectId: string, health: Health, body: string) {
+  const row = await insert("project_updates", { project_id: projectId, health, body, user_id: S().userId }, "Couldn't post update");
+  // the DB trigger sets projects.health; mirror it locally so the UI never waits on realtime
+  const project = S().projects[projectId];
+  if (row && project) mergeRows("projects", [{ ...project, health }]);
+  return row;
+}
 export const deleteProjectUpdate = (id: string) => remove("project_updates", id);
 
 export const createMilestone = (projectId: string, name: string, target_date: string | null = null) => {
@@ -205,14 +210,22 @@ const addDays = (iso: string, n: number) => {
 export const createCycle = (teamId: string, starts_at: string, ends_at: string, name = "") =>
   insert("cycles", { team_id: teamId, starts_at, ends_at, name }, "Couldn't create cycle");
 export const updateCycle = (id: string, patch: Partial<Cycle>) => update("cycles", id, patch, "Couldn't update cycle");
-export const deleteCycle = (id: string) => remove("cycles", id, "Couldn't delete cycle");
+export async function deleteCycle(id: string) {
+  const ok = await remove("cycles", id, "Couldn't delete cycle");
+  if (ok) {
+    // issues lose their cycle server-side (FK set null); mirror locally
+    const s = S();
+    mergeRows("issues", Object.values(s.issues).filter((i) => i.cycle_id === id).map((i) => ({ ...i, cycle_id: null })));
+  }
+  return ok;
+}
 
 /** Create the next cycle for a team, starting where the latest one ends (or today). */
 export async function createNextCycle(teamId: string) {
   const s = S();
   const team = s.teams[teamId];
   const latest = Object.values(s.cycles).filter((c) => c.team_id === teamId).sort((a, b) => b.ends_at.localeCompare(a.ends_at))[0];
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayISO();
   const start = latest && latest.ends_at > today ? latest.ends_at : today;
   return createCycle(teamId, start, addDays(start, 7 * (team?.cycle_duration_weeks ?? 2)));
 }
@@ -316,12 +329,16 @@ export function markAllNotificationsRead() {
   const s = S();
   markNotificationsRead(Object.values(s.notifications).filter((n) => !n.read_at).map((n) => n.id));
 }
-export async function archiveNotifications(ids: string[]) {
+export async function archiveNotifications(ids: string[]): Promise<boolean> {
   const ok = await updateMany("notifications", ids, { archived_at: new Date().toISOString(), read_at: new Date().toISOString() });
   if (ok) dropRows("notifications", ids);
+  return ok;
 }
 export function snoozeNotifications(ids: string[], until: Date) {
-  updateMany("notifications", ids, { snoozed_until: until.toISOString(), read_at: new Date().toISOString() });
+  return updateMany("notifications", ids, { snoozed_until: until.toISOString(), read_at: new Date().toISOString() });
+}
+export function unsnoozeNotifications(ids: string[]) {
+  return updateMany("notifications", ids, { snoozed_until: null });
 }
 
 /* ═══ profile & workspace ═══ */

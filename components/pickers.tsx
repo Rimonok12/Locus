@@ -242,7 +242,7 @@ export const PICKER_TITLE: Record<PickerKind, string> = {
 /* ═══ anchored property chip bound to one issue ═══ */
 
 const chipCls =
-  "focus-ring inline-flex h-7 max-w-full items-center gap-1.5 rounded-md px-2 text-[12.5px] text-ink transition-colors hover:bg-wash";
+  "focus-ring inline-flex h-8 max-w-full items-center gap-1.5 rounded-md px-2 text-[12.5px] text-ink transition-colors hover:bg-wash sm:h-7";
 
 /**
  * A clickable property value that opens its picker in a popover.
@@ -318,7 +318,7 @@ export function PropertyChip({
           aria-expanded={p["aria-expanded"]}
           className={
             variant === "icon"
-              ? "focus-ring inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-[5px] hover:bg-wash"
+              ? "focus-ring inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[5px] hover:bg-wash sm:h-6 sm:w-6"
               : variant === "chip"
                 ? `${chipCls} border border-line-strong ${content.empty ? "text-dim" : ""}`
                 : `${chipCls} w-full justify-start ${content.empty ? "text-faint" : ""}`

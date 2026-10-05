@@ -196,6 +196,14 @@ ok(!!(await fails(bob, `update workspace_members set role = 'admin' where user_i
 ok((await as(bob, `delete from workspace_members where user_id = $1 returning *`, [bob])).rows.length === 1, "member can leave");
 ok((await as(bob, `select * from issues`)).rows.length === 0, "after leaving, no access");
 
+console.log("\nfavorites cleanup");
+const favIssue = (await as(alice, `insert into issues (team_id, workspace_id, title) values ($1, $2, 'fav me') returning id`, [team.id, ws.id])).rows[0].id;
+await as(alice, `insert into favorites (workspace_id, user_id, kind, target_id) values ($1, $2, 'issue', $3)`, [ws.id, alice, favIssue]);
+await as(alice, `insert into favorites (workspace_id, user_id, kind, target_id) values ($1, $2, 'project', $3)`, [ws.id, alice, proj.id]);
+await as(alice, `delete from issues where id = $1`, [favIssue]);
+await as(alice, `delete from projects where id = $1`, [proj.id]);
+ok((await as(alice, `select count(*)::int as c from favorites`)).rows[0].c === 0, "favorites removed when their issue/project is deleted");
+
 console.log("\nworkspace delete cascade");
 ok((await as(alice, `delete from workspaces where id = $1 returning id`, [ws.id])).rows.length === 1, "admin deletes workspace (full cascade succeeds)");
 await db.exec("reset role");

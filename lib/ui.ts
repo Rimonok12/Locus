@@ -21,6 +21,7 @@ export interface ConfirmRequest {
   confirmLabel?: string;
   destructive?: boolean;
   onConfirm: () => void | Promise<void>;
+  onCancel?: () => void;
 }
 
 export type Theme = "light" | "dark" | "system";

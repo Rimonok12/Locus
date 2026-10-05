@@ -136,6 +136,7 @@ kbd, .kbd {
 .prose-locus ul[data-type="taskList"] li > label input { accent-color: var(--accent); width: 14px; height: 14px; }
 .prose-locus ul[data-type="taskList"] li[data-checked="true"] > div { color: var(--faint); text-decoration: line-through; }
 .prose-locus .mention { color: var(--accent); background: var(--accent-soft); border-radius: 4px; padding: 0 3px; font-weight: 500; }
+.prose-locus .mention-query { color: var(--accent); }
 .prose-locus p.is-editor-empty:first-child::before,
 .prose-locus .is-empty::before { content: attr(data-placeholder); float: left; color: var(--faint); pointer-events: none; height: 0; }
 .ProseMirror { outline: none; }

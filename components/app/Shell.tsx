@@ -1,7 +1,7 @@
 "use client";
 /* ─── Locus · application shell: sidebar + routed content + global overlays ─── */
 
-import { useEffect } from "react";
+import { useLayoutEffect } from "react";
 import { useRoute } from "@/lib/router";
 import { ui, useUI } from "@/lib/ui";
 import Sidebar from "./Sidebar";
@@ -22,8 +22,9 @@ export default function Shell() {
   const mobileNav = useUI((s) => s.mobileNavOpen);
   useGlobalShortcuts();
 
-  // leaving a view clears transient list state
-  useEffect(() => {
+  // leaving a view clears transient list state — in a layout effect so it runs
+  // before child views' effects (e.g. the issue page focusing its issue)
+  useLayoutEffect(() => {
     ui.clearSelection();
     ui.setFocused(null);
     ui.peek(null);

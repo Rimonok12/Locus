@@ -137,7 +137,11 @@ export function useTeamCycles(teamId: string | undefined): Cycle[] {
   return useMemo(() => Object.values(cycles).filter((c) => c.team_id === teamId).sort((a, b) => a.number - b.number), [cycles, teamId]);
 }
 
-export const todayISO = () => new Date().toISOString().slice(0, 10);
+/** today's date (YYYY-MM-DD) in the user's local timezone */
+export const todayISO = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
 
 export function cyclePhase(c: Cycle, today = todayISO()): "past" | "current" | "upcoming" {
   if (c.completed_at || c.ends_at <= today) return "past";
@@ -435,6 +439,8 @@ export interface IssueQuery {
   flat: Issue[];
   total: number;
   ctx: QueryCtx;
+  /** the single team this view is scoped to, when there is one */
+  teamId?: string;
 }
 
 /**
@@ -468,11 +474,11 @@ export function useIssueQuery(opts: {
   const display = useMemo(
     () => defaultDisplay({ ...opts.defaults, ...stored, properties: { ...DEFAULT_PROPERTIES, ...opts.defaults?.properties, ...stored?.properties } }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [stored, JSON.stringify(opts.defaults)],
+    [stored, opts.viewKey, JSON.stringify(opts.defaults)],
   );
   const filters = useMemo(() => [...(opts.baseFilters ?? []), ...(userFilters ?? [])],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [userFilters, JSON.stringify(opts.baseFilters)]);
+    [userFilters, opts.viewKey, JSON.stringify(opts.baseFilters)]);
 
   return useMemo(() => {
     const ctx: QueryCtx = { me, states, teams, labels, projects, cycles, profiles, members, today: todayISO() };
@@ -484,7 +490,7 @@ export function useIssueQuery(opts: {
     const seen = new Set<string>();
     const flat: Issue[] = [];
     for (const g of groups) for (const i of g.issues) if (!seen.has(i.id)) { seen.add(i.id); flat.push(i); }
-    return { display, filters, groups, flat, total: list.length, ctx };
+    return { display, filters, groups, flat, total: list.length, ctx, teamId: opts.teamId };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [issues, states, teams, labels, projects, cycles, profiles, members, me, display, filters, opts.teamId, ...(opts.deps ?? [])]);
+  }, [issues, states, teams, labels, projects, cycles, profiles, members, me, display, filters, opts.viewKey, opts.teamId, ...(opts.deps ?? [])]);
 }

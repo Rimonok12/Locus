@@ -3,7 +3,7 @@
 
 import { Command } from "cmdk";
 import { Check, Plus } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 
 export interface MenuItem {
   id: string;
@@ -61,7 +61,7 @@ export function SelectMenu({
           value={query}
           onValueChange={setQuery}
           placeholder={placeholder}
-          className="h-9 w-full bg-transparent text-[13px] text-ink outline-none placeholder:text-faint"
+          className="h-10 w-full bg-transparent text-[16px] text-ink outline-none placeholder:text-faint sm:h-9 sm:text-[13px]"
         />
       </div>
       <Command.List className="overflow-y-auto p-1" style={{ maxHeight }}>
@@ -73,7 +73,7 @@ export function SelectMenu({
               value={`${item.label} ${item.keywords?.join(" ") ?? ""} ${item.id}`}
               disabled={item.disabled}
               onSelect={() => onSelect(item.id)}
-              className="flex h-8 cursor-pointer select-none items-center gap-2 rounded-md px-2 text-[13px] text-ink"
+              className="flex h-9 cursor-pointer select-none items-center gap-2 rounded-md px-2 text-[13px] text-ink sm:h-8"
             >
               {multi && (
                 <span className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[4px] border ${sel.has(item.id) ? "border-accent bg-accent text-white" : "border-line-strong"}`}>
@@ -117,16 +117,30 @@ export interface ActionItem {
 }
 
 export function ActionMenu({ items, onDone }: { items: ActionItem[]; onDone?: () => void }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const buttons = () => Array.from(ref.current?.querySelectorAll<HTMLButtonElement>("button[role=menuitem]:not(:disabled)") ?? []);
+  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    const list = buttons();
+    if (!list.length) return;
+    const i = list.indexOf(document.activeElement as HTMLButtonElement);
+    let next = -1;
+    if (e.key === "ArrowDown") next = (i + 1) % list.length;
+    else if (e.key === "ArrowUp") next = (i - 1 + list.length) % list.length;
+    else if (e.key === "Home") next = 0;
+    else if (e.key === "End") next = list.length - 1;
+    if (next >= 0) { e.preventDefault(); list[next].focus(); }
+  };
   return (
-    <div className="min-w-[200px] p-1" role="menu">
-      {items.map((it) => (
+    <div ref={ref} className="min-w-[200px] p-1" role="menu" onKeyDown={onKeyDown}>
+      {items.map((it, idx) => (
         <div key={it.id}>
           {it.divider && <div className="my-1 h-px bg-line" />}
           <button
             role="menuitem"
+            autoFocus={idx === 0}
             disabled={it.disabled}
             onClick={() => { it.onSelect(); onDone?.(); }}
-            className={`flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-[13px] transition-colors hover:bg-wash disabled:opacity-40 ${it.danger ? "text-danger" : "text-ink"}`}
+            className={`flex h-9 w-full items-center gap-2 rounded-md px-2 text-left text-[13px] outline-none transition-colors hover:bg-wash focus:bg-wash disabled:opacity-40 sm:h-8 ${it.danger ? "text-danger" : "text-ink"}`}
           >
             {it.icon && <span className={`flex w-4 shrink-0 items-center justify-center ${it.danger ? "" : "text-dim"}`}>{it.icon}</span>}
             <span className="flex-1 truncate">{it.label}</span>

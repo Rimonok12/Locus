@@ -3,6 +3,7 @@
 
 import { forwardRef, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type TextareaHTMLAttributes } from "react";
 import { Loader2 } from "lucide-react";
+import { cn } from "@/lib/cn";
 
 type Variant = "primary" | "secondary" | "ghost" | "danger" | "outline";
 type Size = "xs" | "sm" | "md" | "lg";
@@ -35,7 +36,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
     <button
       ref={ref}
       disabled={disabled || loading}
-      className={`focus-ring inline-flex shrink-0 select-none items-center justify-center whitespace-nowrap font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${VARIANT[variant]} ${SIZE[size]} ${className}`}
+      className={cn("focus-ring inline-flex shrink-0 select-none items-center justify-center whitespace-nowrap font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50", VARIANT[variant], SIZE[size], className)}
       {...rest}
     >
       {loading ? <Loader2 size={13} className="animate-spin" /> : icon}
@@ -51,7 +52,7 @@ export const IconButton = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTM
         ref={ref}
         aria-label={label}
         title={label}
-        className={`focus-ring inline-flex shrink-0 items-center justify-center rounded-md transition-colors ${active ? "bg-wash text-ink" : "text-faint hover:bg-wash hover:text-ink"} ${className}`}
+        className={cn("focus-ring inline-flex shrink-0 items-center justify-center rounded-md transition-colors", active ? "bg-wash text-ink" : "text-faint hover:bg-wash hover:text-ink", className)}
         style={{ width: size, height: size }}
         {...rest}
       >
@@ -66,7 +67,7 @@ export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputE
     return (
       <input
         ref={ref}
-        className={`h-8 w-full rounded-md border bg-surface px-2.5 text-[13px] text-ink outline-none transition-colors placeholder:text-faint focus:border-accent focus:ring-2 focus:ring-accent-soft ${invalid ? "border-danger" : "border-line-strong"} ${className}`}
+        className={cn("h-9 w-full rounded-md border bg-surface px-2.5 text-[16px] text-ink outline-none transition-colors placeholder:text-faint focus:border-accent focus:ring-2 focus:ring-accent-soft sm:h-8 sm:text-[13px]", invalid ? "border-danger" : "border-line-strong", className)}
         {...rest}
       />
     );
@@ -78,7 +79,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<H
     return (
       <textarea
         ref={ref}
-        className={`w-full rounded-md border border-line-strong bg-surface px-2.5 py-2 text-[13px] text-ink outline-none transition-colors placeholder:text-faint focus:border-accent focus:ring-2 focus:ring-accent-soft ${className}`}
+        className={cn("w-full rounded-md border border-line-strong bg-surface px-2.5 py-2 text-[16px] text-ink outline-none transition-colors placeholder:text-faint focus:border-accent focus:ring-2 focus:ring-accent-soft sm:text-[13px]", className)}
         {...rest}
       />
     );
@@ -139,7 +140,7 @@ export function Tooltip({ label, shortcut, children, side = "bottom" }: { label:
 }
 
 export function Spinner({ size = 16, className = "" }: { size?: number; className?: string }) {
-  return <Loader2 size={size} className={`animate-spin text-faint ${className}`} />;
+  return <Loader2 size={size} className={cn("animate-spin text-faint", className)} />;
 }
 
 export function EmptyState({ icon, title, body, action }: { icon?: ReactNode; title: string; body?: ReactNode; action?: ReactNode }) {

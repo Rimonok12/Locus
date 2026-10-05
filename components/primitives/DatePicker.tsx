@@ -11,11 +11,12 @@ const pad = (n: number) => String(n).padStart(2, "0");
 const iso = (y: number, m: number, d: number) => `${y}-${pad(m + 1)}-${pad(d)}`;
 
 export function DatePicker({
-  value, onChange, min, highlight,
+  value, onChange, min, max, highlight,
 }: {
   value: string | null;
   onChange: (date: string) => void;
   min?: string;
+  max?: string;
   /** optional inclusive range to tint (e.g. cycle span) */
   highlight?: { from: string; to: string };
 }) {
@@ -49,7 +50,7 @@ export function DatePicker({
           const date = iso(cursor.y, cursor.m, d);
           const selected = date === value;
           const isToday = date === today;
-          const disabled = Boolean(min && date < min);
+          const disabled = Boolean((min && date < min) || (max && date > max));
           const inRange = highlight && date >= highlight.from && date <= highlight.to;
           return (
             <button
