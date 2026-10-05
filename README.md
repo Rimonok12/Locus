@@ -62,7 +62,7 @@ Architecture notes live in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
   - lifecycle timestamps
   - last-admin protection
 - **Activity & notifications are generated in Postgres.** History rows, subscriptions, @mention parsing and notification fan-out can't be forged by clients.
-- **Tested.** `npm run db:test` runs the migrations against an in-process Postgres (PGlite) with a Supabase auth shim and checks 62 tenancy and behavior assertions.
+- **Tested.** `npm run db:test` runs the migrations against an in-process Postgres (PGlite) with a Supabase auth shim and checks 174 tenancy, upgrade-path and behavior assertions.
 
 ## Run locally
 
