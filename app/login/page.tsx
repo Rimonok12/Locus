@@ -1,4 +1,4 @@
-/* ─── Locus · /login — password, magic link or Google ─── */
+/* ─── Locus · /login — email + password (magic link when auth emails are enabled) ─── */
 
 import type { Metadata } from "next";
 import LoginForm from "@/components/auth/LoginForm";
