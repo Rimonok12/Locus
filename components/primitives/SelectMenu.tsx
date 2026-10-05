@@ -24,6 +24,7 @@ export interface MenuItem {
 export function SelectMenu({
   items, selected, onSelect, placeholder = "Search…", multi = false, emptyText = "No results",
   onCreate, createLabel, autoFocus = true, maxHeight = 320, footer, digitShortcuts = true,
+  shouldFilter = true, onQueryChange,
 }: {
   items: MenuItem[];
   selected?: string | string[] | null;
@@ -38,8 +39,13 @@ export function SelectMenu({
   maxHeight?: number;
   footer?: ReactNode;
   digitShortcuts?: boolean;
+  /** false: the caller filters / ranks `items` itself (from onQueryChange) and their order is kept */
+  shouldFilter?: boolean;
+  /** called with the search text on every change */
+  onQueryChange?: (query: string) => void;
 }) {
   const [query, setQuery] = useState("");
+  const changeQuery = (q: string) => { setQuery(q); onQueryChange?.(q); };
   const sel = new Set(Array.isArray(selected) ? selected : selected != null ? [selected] : []);
   const groups = Array.from(new Set(items.map((i) => i.group ?? "")));
   const exact = items.some((i) => i.label.toLowerCase() === query.trim().toLowerCase());
@@ -47,6 +53,7 @@ export function SelectMenu({
   return (
     <Command
       loop
+      shouldFilter={shouldFilter}
       className="flex flex-col"
       onKeyDown={(e) => {
         if (digitShortcuts && !query && /^[1-9]$/.test(e.key) && !e.metaKey && !e.ctrlKey) {
@@ -59,7 +66,7 @@ export function SelectMenu({
         <Command.Input
           autoFocus={autoFocus}
           value={query}
-          onValueChange={setQuery}
+          onValueChange={changeQuery}
           placeholder={placeholder}
           className="h-10 w-full bg-transparent text-[16px] text-ink outline-none placeholder:text-faint sm:h-9 sm:text-[13px]"
         />
@@ -91,7 +98,7 @@ export function SelectMenu({
         {onCreate && query.trim() && !exact && (
           <Command.Item
             value={`__create ${query}`}
-            onSelect={() => { onCreate(query.trim()); setQuery(""); }}
+            onSelect={() => { onCreate(query.trim()); changeQuery(""); }}
             className="flex h-8 cursor-pointer items-center gap-2 rounded-md px-2 text-[13px] text-dim"
           >
             <Plus size={14} className="text-faint" />

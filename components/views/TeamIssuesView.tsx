@@ -5,7 +5,7 @@ import { useCallback, useMemo } from "react";
 import { Archive, CircleDot, Plus, Star, Timer } from "lucide-react";
 import { useSync } from "@/lib/sync/store";
 import { ui } from "@/lib/ui";
-import { useIssueQuery, useTeamByKey, useTeamStates } from "@/lib/model";
+import { useIssueQuery, useTeamStates } from "@/lib/model";
 import { toggleFavorite } from "@/lib/sync/actions";
 import type { TeamTab } from "@/lib/router";
 import { HeaderTab, ViewHeader } from "@/components/app/Header";
@@ -14,7 +14,7 @@ import { Button, EmptyState } from "@/components/primitives/controls";
 import { TeamIcon } from "@/components/primitives/icons";
 import IssuesSurface, { DisplayMenu, FilterBar, FilterButton } from "@/components/issues/IssuesSurface";
 import { TEAM_TAB_FILTERS } from "@/components/issues/filters";
-import { ToolbarButton } from "@/components/issues/shared";
+import { ToolbarButton, useRoutedTeam } from "@/components/issues/shared";
 import type { Issue, Team } from "@/lib/types";
 
 const TABS: { tab: TeamTab; label: string }[] = [
@@ -24,7 +24,8 @@ const TABS: { tab: TeamTab; label: string }[] = [
 ];
 
 export default function TeamIssuesView({ teamKey, tab }: { teamKey: string; tab: "all" | "active" | "backlog" }) {
-  const team = useTeamByKey(teamKey);
+  // pinned by id: a teammate renaming the team key moves the URL along instead of showing "not found"
+  const team = useRoutedTeam(teamKey, (key) => ({ kind: "team", key, tab }));
   if (!team) return <NotFound what="team" />;
   return <TeamIssues team={team} tab={tab} />;
 }

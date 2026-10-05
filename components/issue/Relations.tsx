@@ -2,15 +2,16 @@
 /* ─── Locus · issue relations (blocked by / blocking / related / duplicates) ─── */
 
 import { useMemo, useState, type ReactNode } from "react";
+import { Command } from "cmdk";
 import { ArrowLeftRight, ChevronLeft, Copy, Link2, OctagonAlert, OctagonX, X } from "lucide-react";
 import { useSync } from "@/lib/sync/store";
 import { issueKey } from "@/lib/model";
 import { linkProps } from "@/lib/router";
 import { addRelation, removeRelation } from "@/lib/sync/actions";
 import { StateGlyph } from "@/components/pickers";
-import { SelectMenu, type MenuItem } from "@/components/primitives/SelectMenu";
+import { SelectMenu } from "@/components/primitives/SelectMenu";
 import { Dropdown } from "@/components/primitives/overlay";
-import type { Issue, IssueRelation, RelationType } from "@/lib/types";
+import type { Issue, IssueRelation, RelationType, Team } from "@/lib/types";
 
 /** Relation kinds as seen from the current issue. */
 type Kind = "blocked_by" | "blocking" | "related" | "duplicate_of" | "duplicated_by";
@@ -59,31 +60,63 @@ function relationFor(kind: Kind, self: string, other: string): { from: string; t
 
 /* ─── add-relation popover: pick a type, then an issue ─── */
 
+const MAX_RESULTS = 50;
+
+/**
+ * Candidates for `q`, ranked over the whole pool (not a pre-cut slice), best first:
+ * exact key ("eng-12" / "eng 12") → number or key prefix → title prefix → title words → key parts only.
+ * Ties go to the most recently updated. An empty query lists the most recently updated issues.
+ */
+function rankCandidates(pool: Issue[], teams: Record<string, Team>, q: string): Issue[] {
+  const query = q.trim().toLowerCase();
+  if (!query) return [...pool].sort((a, b) => b.updated_at.localeCompare(a.updated_at)).slice(0, MAX_RESULTS);
+  const spacedKey = query.replace(/^([a-z][a-z0-9]*)\s+(\d+)$/, "$1-$2");
+  const num = /^\d+$/.test(query) ? Number(query) : null;
+  const keyish = query.includes("-");
+  const tokens = query.split(/\s+/).filter(Boolean);
+  const scored: { i: Issue; r: number }[] = [];
+  for (const i of pool) {
+    const teamKey = (teams[i.team_id]?.key ?? "").toLowerCase();
+    const key = `${teamKey}-${i.number}`;
+    const title = i.title.toLowerCase();
+    let r = -1;
+    if (key === query || key === spacedKey) r = 0;
+    else if ((num !== null && i.number === num) || (keyish && key.startsWith(query))) r = 1;
+    else if (title.startsWith(query)) r = 2;
+    else {
+      let viaTitle = false;
+      const ok = tokens.every((t) => {
+        if (title.includes(t)) { viaTitle = true; return true; }
+        // "eng 12 login" → a team key and a bare number are identifier parts
+        return t === teamKey || t === key || (/^\d+$/.test(t) && i.number === Number(t));
+      });
+      if (ok) r = viaTitle ? 3 : 4;
+    }
+    if (r >= 0) scored.push({ i, r });
+  }
+  scored.sort((a, b) => a.r - b.r || b.i.updated_at.localeCompare(a.i.updated_at));
+  return scored.slice(0, MAX_RESULTS).map((x) => x.i);
+}
+
 function AddRelationMenu({ issue, close }: { issue: Issue; close: () => void }) {
   const [kind, setKind] = useState<Kind | null>(null);
+  const [q, setQ] = useState("");
   const groups = useRelationGroups(issue.id);
   const issues = useSync((s) => s.issues);
   const teams = useSync((s) => s.teams);
-  const states = useSync((s) => s.workflow_states);
 
-  const issueItems: MenuItem[] = useMemo(() => {
+  // every issue this one can still be linked to as `kind`
+  const pool = useMemo(() => {
     if (!kind) return [];
     const taken = new Set(groups[kind].map((l) => l.other.id));
     // the opposite direction of a block would create a cycle of two
     if (kind === "blocked_by") groups.blocking.forEach((l) => taken.add(l.other.id));
     if (kind === "blocking") groups.blocked_by.forEach((l) => taken.add(l.other.id));
     if (kind === "duplicate_of") groups.duplicated_by.forEach((l) => taken.add(l.other.id));
-    return Object.values(issues)
-      .filter((i) => i.id !== issue.id && !i.archived_at && !taken.has(i.id))
-      .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
-      .slice(0, 400)
-      .map((i) => ({
-        id: i.id,
-        label: `${issueKey(i, teams)} ${i.title}`,
-        icon: <StateGlyph stateId={i.state_id} />,
-        keywords: [states[i.state_id]?.name ?? ""],
-      }));
-  }, [kind, groups, issues, teams, states, issue.id]);
+    return Object.values(issues).filter((i) => i.id !== issue.id && !i.archived_at && !taken.has(i.id));
+  }, [kind, groups, issues, issue.id]);
+
+  const results = useMemo(() => rankCandidates(pool, teams, q), [pool, teams, q]);
 
   if (!kind) {
     return (
@@ -95,27 +128,55 @@ function AddRelationMenu({ issue, close }: { issue: Issue; close: () => void }) 
     );
   }
 
+  const back = () => { setKind(null); setQ(""); };
   const meta = KINDS.find((k) => k.kind === kind)!;
   return (
     <div>
       <div className="flex h-9 items-center gap-1 border-b border-line px-1 text-xxs font-medium text-dim">
-        <button aria-label="Back to relation types" title="Back" onClick={() => setKind(null)} className="focus-ring flex h-8 w-8 items-center justify-center rounded-md text-faint hover:bg-wash hover:text-ink sm:h-7 sm:w-7">
+        <button aria-label="Back to relation types" title="Back" onClick={back} className="focus-ring flex h-8 w-8 items-center justify-center rounded-md text-faint hover:bg-wash hover:text-ink sm:h-7 sm:w-7">
           <ChevronLeft size={14} />
         </button>
         {meta.icon}
         <span>{meta.label}</span>
       </div>
-      <SelectMenu
-        items={issueItems}
-        placeholder="Search issues…"
-        emptyText="No matching issues"
-        digitShortcuts={false}
-        onSelect={(otherId) => {
-          const r = relationFor(kind, issue.id, otherId);
-          if (r) void addRelation(r.from, r.to, r.type);
-          close();
-        }}
-      />
+      {/* cmdk only orders what it is given: rank the whole store here and render the top matches */}
+      <Command shouldFilter={false} loop label={`${meta.label} issue`} className="flex flex-col">
+        <div className="border-b border-line px-3">
+          <Command.Input
+            autoFocus
+            value={q}
+            onValueChange={setQ}
+            onKeyDown={(e) => {
+              // Backspace on an empty search steps back to the relation types
+              if (e.key === "Backspace" && !q && !e.metaKey && !e.ctrlKey && !e.altKey) { e.preventDefault(); back(); }
+            }}
+            placeholder="Search issues…"
+            className="h-10 w-full bg-transparent text-[16px] text-ink outline-none placeholder:text-faint sm:h-9 sm:text-[13px]"
+          />
+        </div>
+        <Command.List className="overflow-y-auto p-1" style={{ maxHeight: 320 }}>
+          <Command.Empty>No matching issues</Command.Empty>
+          {results.map((i) => {
+            const key = issueKey(i, teams);
+            return (
+              <Command.Item
+                key={i.id}
+                value={i.id}
+                onSelect={() => {
+                  const r = relationFor(kind, issue.id, i.id);
+                  if (r) void addRelation(r.from, r.to, r.type);
+                  close();
+                }}
+                className="flex h-9 cursor-pointer select-none items-center gap-2 rounded-md px-2 text-[13px] text-ink sm:h-8"
+              >
+                <span className="flex w-4 shrink-0 items-center justify-center"><StateGlyph stateId={i.state_id} /></span>
+                <span className="w-[62px] shrink-0 truncate text-[12px] tabular-nums text-faint">{key}</span>
+                <span className="min-w-0 flex-1 truncate">{i.title}</span>
+              </Command.Item>
+            );
+          })}
+        </Command.List>
+      </Command>
     </div>
   );
 }

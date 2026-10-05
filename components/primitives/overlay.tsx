@@ -6,6 +6,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { useUI } from "@/lib/ui";
+import { cn } from "@/lib/cn";
 
 /** Renders into document.body. Mounts synchronously on the client so children can be measured immediately. */
 export function Portal({ children }: { children: ReactNode }) {
@@ -41,6 +42,10 @@ type Side = "bottom" | "top" | "right" | "left";
 type Align = "start" | "end" | "center";
 
 const FOCUSABLE = "[autofocus], input:not([type=hidden]):not([disabled]), textarea:not([disabled])";
+const TABBABLE =
+  'a[href], button:not([disabled]), input:not([disabled]):not([type=hidden]), select:not([disabled]), textarea:not([disabled]), [tabindex], [contenteditable]:not([contenteditable="false"])';
+const tabbables = (root: HTMLElement) =>
+  Array.from(root.querySelectorAll<HTMLElement>(TABBABLE)).filter((el) => el.tabIndex >= 0 && el.getClientRects().length > 0);
 
 /** Fixed-position popover anchored to an element (or a point). Closes on outside click / Escape. */
 export function Popover({
@@ -97,12 +102,14 @@ export function Popover({
     place();
     const ro = new ResizeObserver(place);
     ro.observe(node);
+    // the popover's own scrolling (tall menus) never moves its anchor
+    const onScroll = (e: Event) => { if (!node.contains(e.target as Node)) place(); };
     window.addEventListener("resize", place);
-    window.addEventListener("scroll", place, true);
+    window.addEventListener("scroll", onScroll, true);
     return () => {
       ro.disconnect();
       window.removeEventListener("resize", place);
-      window.removeEventListener("scroll", place, true);
+      window.removeEventListener("scroll", onScroll, true);
     };
   }, [open, node, place]);
 
@@ -171,7 +178,9 @@ export function Popover({
         ref={setNode}
         role="dialog"
         data-locus-popover=""
-        className={`anim-pop fixed z-[90] overflow-hidden rounded-lg bg-surface shadow-pop ${className}`}
+        // never taller than the viewport: tall menus (date picker, long lists) scroll instead of clipping;
+        // overflow-x stays hidden so content wider than a fixed width is clipped, not scrolled
+        className={cn("anim-pop fixed z-[90] max-h-[calc(100dvh-16px)] overflow-y-auto overflow-x-hidden overscroll-contain rounded-lg bg-surface shadow-pop", className)}
         style={{ ...pos, ...(typeof width === "number" ? { width } : {}) }}
         onMouseDown={(e) => e.stopPropagation()}
         onClick={(e) => e.stopPropagation()}
@@ -214,7 +223,10 @@ export function Dropdown({
   );
 }
 
-/** Centered modal dialog with backdrop. Escape closes only the top-most modal. */
+/**
+ * Centered modal dialog with backdrop. Escape closes only the top-most modal; Tab / Shift+Tab stay
+ * inside it, and focus moves into it when it opens (so keys never act on the page behind).
+ */
 export function Modal({
   open, onClose, children, width = 560, className = "", position = "center", label,
 }: {
@@ -229,6 +241,7 @@ export function Modal({
   const id = useId();
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
+  const panelRef = useRef<HTMLDivElement>(null);
   useOverlayCount(open);
 
   useEffect(() => {
@@ -236,6 +249,24 @@ export function Modal({
     closeAllPopovers(); // menus opened underneath must not float above this modal
     modalStack.push(id);
     const onKey = (e: KeyboardEvent) => {
+      // Tiptap list indent / mention pick call preventDefault first and win
+      if (e.key === "Tab" && !e.defaultPrevented && !e.altKey && !e.ctrlKey && !e.metaKey) {
+        if (modalStack[modalStack.length - 1] !== id) return; // only the top-most modal traps
+        const panel = panelRef.current;
+        if (!panel) return;
+        const active = document.activeElement as HTMLElement | null;
+        if (active?.closest("[data-locus-popover]")) return; // popovers opened from the modal live outside the panel
+        const list = tabbables(panel);
+        if (!list.length) { e.preventDefault(); panel.focus({ preventScroll: true }); return; }
+        const first = list[0];
+        const last = list[list.length - 1];
+        const inside = !!active && panel.contains(active) && active !== panel;
+        if (e.shiftKey ? (!inside || active === first) : (!inside || active === last)) {
+          e.preventDefault();
+          (e.shiftKey ? last : first).focus({ preventScroll: true });
+        }
+        return;
+      }
       if (e.key !== "Escape" || e.defaultPrevented) return;
       if (modalStack[modalStack.length - 1] !== id) return;
       e.preventDefault();
@@ -243,9 +274,17 @@ export function Modal({
       closeRef.current();
     };
     document.addEventListener("keydown", onKey);
+    // initial focus fallback: after children's autoFocus and after closed popovers returned focus to their anchors
+    const raf = requestAnimationFrame(() => {
+      const panel = panelRef.current;
+      if (panel && modalStack[modalStack.length - 1] === id && !panel.contains(document.activeElement)) {
+        panel.focus({ preventScroll: true });
+      }
+    });
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
+      cancelAnimationFrame(raf);
       document.removeEventListener("keydown", onKey);
       const i = modalStack.lastIndexOf(id);
       if (i >= 0) modalStack.splice(i, 1);
@@ -261,10 +300,12 @@ export function Modal({
         onMouseDown={(e) => { if (e.target === e.currentTarget) closeRef.current(); }}
       >
         <div
+          ref={panelRef}
           role="dialog"
           aria-modal="true"
           aria-label={label}
-          className={`anim-modal max-h-[88dvh] w-full overflow-y-auto rounded-xl bg-surface shadow-modal ${className}`}
+          tabIndex={-1}
+          className={`anim-modal max-h-[88dvh] w-full overflow-y-auto rounded-xl bg-surface shadow-modal outline-none ${className}`}
           style={{ maxWidth: width }}
         >
           {children}

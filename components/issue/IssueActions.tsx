@@ -97,7 +97,11 @@ export function IssueMoreMenu({ issue, issueKey: key, context = "page", size = 3
   );
 }
 
-/** Open the previous (-1) / next (+1) issue of the list the user came from. Returns false at either end. */
+/**
+ * Open the previous (-1) / next (+1) issue of the list the user came from. Returns false at either end.
+ * The step replaces the current history entry, so J/K browsing stays one visit: Escape / browser Back
+ * return to the list rather than walking back through every issue stepped over.
+ */
 export function stepIssue(navIds: string[], currentId: string, delta: 1 | -1): boolean {
   const index = navIds.indexOf(currentId);
   if (index < 0) return false;
@@ -105,7 +109,7 @@ export function stepIssue(navIds: string[], currentId: string, delta: 1 | -1): b
   for (let i = index + delta; i >= 0 && i < navIds.length; i += delta) {
     const next = s.issues[navIds[i]];
     if (next) {
-      navigate({ kind: "issue", identifier: issueKey(next, s.teams) });
+      navigate({ kind: "issue", identifier: issueKey(next, s.teams) }, { replace: true });
       return true;
     }
   }

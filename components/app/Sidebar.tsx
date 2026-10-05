@@ -1,7 +1,7 @@
 "use client";
 /* ─── Locus · sidebar navigation ─── */
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   ChevronDown, ChevronRight, CircleDot, HelpCircle, Inbox, Layers, LogOut, MoreHorizontal, PanelLeftClose,
   Plus, RefreshCw, Search, Settings, SquarePen, Star, Target, UserPlus, Wifi, WifiOff,
@@ -30,7 +30,7 @@ function NavItem({
   return (
     <a
       {...linkProps(to)}
-      className={`group flex h-7 items-center gap-2 rounded-md pr-2 text-[13px] transition-colors ${
+      className={`group flex h-8 items-center gap-2 rounded-md pr-2 text-[13px] transition-colors md:h-7 ${
         active ? "bg-wash font-medium text-ink" : "text-dim hover:bg-wash hover:text-ink"
       }`}
       style={{ paddingLeft: 8 + indent * 18 }}
@@ -47,12 +47,12 @@ function Section({ title, children, defaultOpen = true, action }: { title: strin
   const [open, setOpen] = useState(defaultOpen);
   return (
     <div className="pt-4">
-      <div className="group flex h-6 items-center pl-2 pr-1">
-        <button onClick={() => setOpen(!open)} className="flex flex-1 items-center gap-1 text-[11.5px] font-medium text-faint hover:text-dim">
+      <div className="group flex h-8 items-center pl-2 pr-1 md:h-6">
+        <button onClick={() => setOpen(!open)} aria-expanded={open} className="flex flex-1 items-center gap-1 self-stretch text-[11.5px] font-medium text-faint hover:text-dim">
           {title}
           <ChevronDown size={11} className={`transition-transform ${open ? "" : "-rotate-90"}`} />
         </button>
-        <span className="opacity-0 transition-opacity group-hover:opacity-100">{action}</span>
+        <span className="transition-opacity md:opacity-0 md:focus-within:opacity-100 md:group-hover:opacity-100">{action}</span>
       </div>
       {open && <div className="mt-0.5 space-y-px">{children}</div>}
     </div>
@@ -66,7 +66,7 @@ function TeamNav({ team, route }: { team: Team; route: Route }) {
     <div>
       <button
         onClick={() => setOpen(!open)}
-        className="group flex h-7 w-full items-center gap-2 rounded-md px-2 text-[13px] text-dim hover:bg-wash hover:text-ink"
+        className="group flex h-8 w-full items-center gap-2 rounded-md px-2 text-[13px] text-dim hover:bg-wash hover:text-ink md:h-7"
       >
         <TeamIcon team={team} size={16} />
         <span className={`min-w-0 flex-1 truncate text-left ${inTeam ? "text-ink" : ""}`}>{team.name}</span>
@@ -133,7 +133,7 @@ function Favorites({ route }: { route: Route }) {
             <button
               aria-label="Remove from favorites"
               onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleFavorite(it.f.kind, it.f.target_id); }}
-              className="hidden text-faint hover:text-ink group-hover:block"
+              className="hidden text-faint hover:text-ink [@media(hover:hover)]:group-hover:block"
             >
               <Star size={12} className="fill-current" />
             </button>
@@ -176,7 +176,7 @@ function WorkspaceMenu() {
           <ActionMenu
             onDone={close}
             items={[
-              { id: "settings", label: "Settings", icon: <Settings size={14} />, hint: "G S", onSelect: () => navigate({ kind: "settings", section: "workspace" }) },
+              { id: "settings", label: "Workspace settings", icon: <Settings size={14} />, onSelect: () => navigate({ kind: "settings", section: "workspace" }) },
               { id: "invite", label: "Invite members", icon: <UserPlus size={14} />, onSelect: () => navigate({ kind: "settings", section: "members" }) },
               ...all.map((w, i) => ({
                 id: `ws-${w.id}`,
@@ -195,12 +195,25 @@ function WorkspaceMenu() {
   );
 }
 
+/** Current time, re-read every minute and when the tab becomes visible (snoozes expire on their own). */
+function useMinuteClock(): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const tick = () => setNow(Date.now());
+    const id = setInterval(tick, 60_000);
+    const onVis = () => { if (document.visibilityState === "visible") tick(); };
+    document.addEventListener("visibilitychange", onVis);
+    return () => { clearInterval(id); document.removeEventListener("visibilitychange", onVis); };
+  }, []);
+  return now;
+}
+
 export default function Sidebar() {
   const { route } = useRoute();
   const teams = useMyTeams();
   const connection = useSync((s) => s.connection);
+  const now = useMinuteClock();
   const unread = useSync((s) => {
-    const now = Date.now();
     let n = 0;
     for (const x of Object.values(s.notifications)) {
       if (!x.read_at && !x.archived_at && (!x.snoozed_until || Date.parse(x.snoozed_until) <= now)) n++;
@@ -214,12 +227,12 @@ export default function Sidebar() {
       <div className="flex items-center gap-1 px-2.5 pb-1 pt-2.5">
         <WorkspaceMenu />
         <Tooltip label="Search" shortcut={["/"]}>
-          <button aria-label="Search" onClick={() => navigate({ kind: "search" })} className="flex h-7 w-7 items-center justify-center rounded-md text-dim hover:bg-wash hover:text-ink">
+          <button aria-label="Search" onClick={() => navigate({ kind: "search" })} className="flex h-8 w-8 items-center justify-center rounded-md text-dim hover:bg-wash hover:text-ink md:h-7 md:w-7">
             <Search size={15} />
           </button>
         </Tooltip>
         <Tooltip label="Create new issue" shortcut={["C"]}>
-          <button aria-label="Create new issue" onClick={() => ui.openCreateIssue()} className="flex h-7 w-7 items-center justify-center rounded-md border border-line-strong bg-surface text-dim shadow-card hover:text-ink">
+          <button aria-label="Create new issue" onClick={() => ui.openCreateIssue()} className="flex h-8 w-8 items-center justify-center rounded-md border border-line-strong bg-surface text-dim shadow-card hover:text-ink md:h-7 md:w-7">
             <SquarePen size={14} />
           </button>
         </Tooltip>
@@ -242,14 +255,14 @@ export default function Sidebar() {
         <Section
           title="Your teams"
           action={
-            <a {...linkProps({ kind: "settings", section: "teams" })} aria-label="Manage teams" className="flex h-5 w-5 items-center justify-center rounded text-faint hover:bg-wash hover:text-ink">
+            <a {...linkProps({ kind: "settings", section: "teams" })} aria-label="Manage teams" className="flex h-7 w-7 items-center justify-center rounded text-faint hover:bg-wash hover:text-ink md:h-5 md:w-5">
               <MoreHorizontal size={13} />
             </a>
           }
         >
           {teams.map((t) => <TeamNav key={t.id} team={t} route={route} />)}
           {!teams.length && (
-            <a {...linkProps({ kind: "settings", section: "teams" })} className="flex h-7 items-center gap-2 rounded-md px-2 text-[13px] text-faint hover:bg-wash hover:text-ink">
+            <a {...linkProps({ kind: "settings", section: "teams" })} className="flex h-8 items-center gap-2 rounded-md px-2 text-[13px] text-faint hover:bg-wash hover:text-ink md:h-7">
               <Plus size={14} /> Join or create a team
             </a>
           )}
@@ -257,17 +270,17 @@ export default function Sidebar() {
       </nav>
 
       <div className="flex items-center gap-1 border-t border-line px-2.5 py-2">
-        <a {...linkProps({ kind: "settings", section: "account" })} className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1.5 py-1 hover:bg-wash">
+        <a {...linkProps({ kind: "settings", section: "account" })} className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1.5 py-1.5 hover:bg-wash md:py-1">
           <Avatar profile={me} size={20} />
           <span className="truncate text-[12.5px] text-dim">{displayName(me)}</span>
         </a>
         <Tooltip label={connection === "live" ? "Synced in real time" : connection === "offline" ? "Offline — reconnecting" : "Connecting…"} side="top">
-          <span className="flex h-7 w-7 items-center justify-center text-faint">
+          <span className="flex h-8 w-8 items-center justify-center text-faint md:h-7 md:w-7">
             {connection === "offline" ? <WifiOff size={14} className="text-warning" /> : <Wifi size={14} className={connection === "live" ? "text-success" : ""} />}
           </span>
         </Tooltip>
         <Tooltip label="Keyboard shortcuts" shortcut={["?"]} side="top">
-          <button aria-label="Keyboard shortcuts" onClick={ui.openShortcuts} className="flex h-7 w-7 items-center justify-center rounded-md text-faint hover:bg-wash hover:text-ink">
+          <button aria-label="Keyboard shortcuts" onClick={ui.openShortcuts} className="flex h-8 w-8 items-center justify-center rounded-md text-faint hover:bg-wash hover:text-ink md:h-7 md:w-7">
             <HelpCircle size={15} />
           </button>
         </Tooltip>

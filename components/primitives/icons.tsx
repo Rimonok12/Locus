@@ -4,24 +4,40 @@
 import type { Health, Priority, ProjectStatus, StateType, Team } from "@/lib/types";
 import { HEALTH_COLOR } from "@/lib/model";
 
+/**
+ * Pale state colours (e.g. the seeded Todo #e2e2e2) vanish on light rows (~1.3:1). Pull them toward
+ * --ink: about 3.8:1 on the light canvas, while in dark mode they stay pale (ink is light there).
+ * CSS values (var(--faint) …) pass through unchanged.
+ */
+function legibleStateColor(color: string): string {
+  const m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(color.trim());
+  if (!m) return color;
+  const hex = m[1].length === 3 ? m[1].replace(/./g, "$&$&") : m[1];
+  const n = parseInt(hex, 16);
+  const lin = (v: number) => { const c = v / 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
+  const L = 0.2126 * lin((n >> 16) & 255) + 0.7152 * lin((n >> 8) & 255) + 0.0722 * lin(n & 255);
+  return L > 0.7 ? `color-mix(in srgb, ${color} 50%, var(--ink))` : color;
+}
+
 /** Workflow state glyph. `fraction` fills "started" states (0..1). */
 export function StateIcon({
   type, color, size = 14, fraction = 0.5, className,
 }: { type: StateType; color: string; size?: number; fraction?: number; className?: string }) {
   const r = 6;
   const c = 7;
-  const common = { width: size, height: size, viewBox: "0 0 14 14", className, "aria-hidden": true } as const;
+  // colour goes through CSS (style + currentColor) so var() / color-mix() resolve reliably
+  const common = { width: size, height: size, viewBox: "0 0 14 14", className, style: { color: legibleStateColor(color) }, "aria-hidden": true } as const;
   switch (type) {
     case "backlog":
       return (
         <svg {...common}>
-          <circle cx={c} cy={c} r={r} fill="none" stroke={color} strokeWidth="1.5" strokeDasharray="1.4 1.74" />
+          <circle cx={c} cy={c} r={r} fill="none" stroke="currentColor" strokeWidth="1.5" strokeDasharray="1.4 1.74" />
         </svg>
       );
     case "unstarted":
       return (
         <svg {...common}>
-          <circle cx={c} cy={c} r={r} fill="none" stroke={color} strokeWidth="1.5" />
+          <circle cx={c} cy={c} r={r} fill="none" stroke="currentColor" strokeWidth="1.5" />
         </svg>
       );
     case "started": {
@@ -30,9 +46,9 @@ export function StateIcon({
       const circ = 2 * Math.PI * pr;
       return (
         <svg {...common}>
-          <circle cx={c} cy={c} r={r} fill="none" stroke={color} strokeWidth="1.5" />
+          <circle cx={c} cy={c} r={r} fill="none" stroke="currentColor" strokeWidth="1.5" />
           <circle
-            cx={c} cy={c} r={pr} fill="none" stroke={color} strokeWidth={pr * 2}
+            cx={c} cy={c} r={pr} fill="none" stroke="currentColor" strokeWidth={pr * 2}
             strokeDasharray={`${circ * f} ${circ}`} transform={`rotate(-90 ${c} ${c})`}
           />
         </svg>
@@ -41,14 +57,14 @@ export function StateIcon({
     case "completed":
       return (
         <svg {...common}>
-          <circle cx={c} cy={c} r={r + 0.5} fill={color} />
+          <circle cx={c} cy={c} r={r + 0.5} fill="currentColor" />
           <path d="M4.3 7.2l1.9 1.9 3.6-3.9" fill="none" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       );
     case "canceled":
       return (
         <svg {...common}>
-          <circle cx={c} cy={c} r={r + 0.5} fill={color} />
+          <circle cx={c} cy={c} r={r + 0.5} fill="currentColor" />
           <path d="M4.9 4.9l4.2 4.2M9.1 4.9l-4.2 4.2" fill="none" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" />
         </svg>
       );

@@ -91,14 +91,15 @@ const get = useUI.getState;
 export const ui = {
   openPalette: () => set({ paletteOpen: true }),
   closePalette: () => set({ paletteOpen: false }),
-  openCreateIssue: (defaults: Partial<Issue> = {}) => set({ createIssue: { defaults }, paletteOpen: false }),
+  // global dialogs close the mobile nav drawer (as ⌘K does), so dismissing them never lands back in it
+  openCreateIssue: (defaults: Partial<Issue> = {}) => set({ createIssue: { defaults }, paletteOpen: false, mobileNavOpen: false }),
   closeCreateIssue: () => set({ createIssue: null }),
   openPicker: (kind: PickerKind, issueIds: string[]) =>
     issueIds.length ? set({ picker: { kind, issueIds }, paletteOpen: false }) : undefined,
   closePicker: () => set({ picker: null }),
-  openShortcuts: () => set({ shortcutsOpen: true }),
+  openShortcuts: () => set({ shortcutsOpen: true, mobileNavOpen: false }),
   closeShortcuts: () => set({ shortcutsOpen: false }),
-  askConfirm: (req: ConfirmRequest) => set({ confirm: req }),
+  askConfirm: (req: ConfirmRequest) => set({ confirm: req, mobileNavOpen: false }),
   closeConfirm: () => set({ confirm: null }),
   peek: (id: string | null) => set({ peekIssueId: id }),
 
@@ -164,10 +165,24 @@ export const toast = Object.assign(
 );
 
 /* ─── theme ─── */
+/** Canvas colors (globals.css --canvas); the browser chrome / status bar follows the in-app theme. */
+export const THEME_COLOR = { light: "#fcfcfd", dark: "#141518" } as const;
+
 export function applyTheme(theme: Theme) {
   if (typeof document === "undefined") return;
   const dark =
     theme === "dark" || (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
   document.documentElement.classList.toggle("dark", dark);
   document.documentElement.style.colorScheme = dark ? "dark" : "light";
+  // Our own theme-color tag (created by the root layout's head script). Next renders none, so React
+  // never owns, re-mounts or removes it.
+  let meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
+  if (!meta) {
+    meta = document.createElement("meta");
+    meta.name = "theme-color";
+    document.head.appendChild(meta);
+  }
+  meta.removeAttribute("media");
+  meta.content =
+    getComputedStyle(document.documentElement).getPropertyValue("--canvas").trim() || (dark ? THEME_COLOR.dark : THEME_COLOR.light);
 }

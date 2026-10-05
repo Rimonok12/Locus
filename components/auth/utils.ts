@@ -45,44 +45,93 @@ function weakPassword(reasons: string[] | undefined, fallback: string): string {
   return fallback || "That password is too weak. Try a longer one.";
 }
 
+const LINK_ERROR = "That link is invalid or has expired. Request a new one.";
+const SAME_BROWSER = "Open the link in the same browser you requested it from, or request a new one.";
+const SESSION_EXPIRED = "Your session has expired. Please start again.";
+const BAD_CREDENTIALS = "Incorrect email or password.";
+const UNCONFIRMED = "Please confirm your email address first. Check your inbox for the link.";
+const EMAIL_TAKEN = "An account with this email already exists.";
+
+/** Supabase Auth error codes → copy. (weak_password is handled separately: it needs `reasons`.) */
+const CODE_MESSAGES: Record<string, string> = {
+  invalid_credentials: BAD_CREDENTIALS,
+  email_not_confirmed: UNCONFIRMED,
+  user_already_exists: EMAIL_TAKEN,
+  email_exists: EMAIL_TAKEN,
+  same_password: "Your new password must be different from your current one.",
+  over_email_send_rate_limit: "Too many emails sent. Please wait a minute before trying again.",
+  over_request_rate_limit: "Too many attempts. Please wait a minute and try again.",
+  signup_disabled: "New sign-ups are currently disabled.",
+  email_provider_disabled: "Email sign-in is disabled. Use another sign-in method.",
+  email_address_invalid: "Enter a valid email address.",
+  email_address_not_authorized: "Email delivery isn’t set up for this app yet, so we can’t email this address. Log in with your password instead.",
+  otp_expired: "That link has expired. Request a new one.",
+  flow_state_not_found: SAME_BROWSER,
+  flow_state_expired: SAME_BROWSER,
+  bad_code_verifier: SAME_BROWSER,
+  session_not_found: SESSION_EXPIRED,
+  session_expired: SESSION_EXPIRED,
+  refresh_token_not_found: SESSION_EXPIRED,
+  provider_disabled: "This sign-in method isn’t enabled. Log in with your email and password.",
+  unexpected_audience: "This sign-in method is misconfigured. Log in with your email and password.",
+  user_banned: "This account has been suspended.",
+  captcha_failed: "Captcha verification failed. Please try again.",
+  reauthentication_needed: "For security, log in again before changing your password.",
+};
+
+/**
+ * Codes that only reach /login through a redirect (?error=<code>) from the auth callback /
+ * confirm routes or the identity provider — never from an in-form request.
+ */
+const LINK_CODES: Record<string, string> = {
+  missing_code: LINK_ERROR,
+  invalid_link: LINK_ERROR,
+  unknown: LINK_ERROR,
+  otp_disabled: LINK_ERROR,
+  bad_oauth_state: LINK_ERROR,
+  bad_oauth_callback: LINK_ERROR,
+  access_denied: "Sign-in was cancelled. Try again.",
+};
+
+const AUTH_CODE_RE = /^[a-z_]{1,64}$/;
+
+/** Own-property lookup, so codes like "constructor" / "__proto__" never hit Object.prototype. */
+function lookup(table: Record<string, string>, key: string | undefined): string | null {
+  return key && Object.prototype.hasOwnProperty.call(table, key) ? table[key] : null;
+}
+
+/** Recognised raw Supabase messages → fixed copy (null when nothing matches). */
+function messagePattern(msg: string): string | null {
+  if (!msg) return null;
+  if (/failed to fetch|networkerror|network request failed|load failed/i.test(msg)) return "Can’t reach the server. Check your connection and try again.";
+  if (/invalid login credentials/i.test(msg)) return BAD_CREDENTIALS;
+  if (/user already registered/i.test(msg)) return EMAIL_TAKEN;
+  if (/email not confirmed/i.test(msg)) return UNCONFIRMED;
+  if (/auth session missing/i.test(msg)) return SESSION_EXPIRED;
+  if (/code verifier|both auth code and code verifier/i.test(msg)) return SAME_BROWSER;
+  if (/(link|token).*(invalid|expired)|(invalid|expired).*(link|token)/i.test(msg)) return LINK_ERROR;
+  return null;
+}
+
 /** Turn a Supabase Auth error (or a raw message) into copy a person can act on. */
 export function authErrorMessage(err: unknown): string {
   const e = (typeof err === "string" ? { message: err } : (err ?? {})) as AuthLikeError;
   const msg = (e.message ?? "").trim();
-  switch (e.code) {
-    case "invalid_credentials": return "Incorrect email or password.";
-    case "email_not_confirmed": return "Please confirm your email address first. Check your inbox for the link.";
-    case "user_already_exists":
-    case "email_exists": return "An account with this email already exists.";
-    case "weak_password": return weakPassword(e.reasons, msg);
-    case "same_password": return "Your new password must be different from your current one.";
-    case "over_email_send_rate_limit": return "Too many emails sent. Please wait a minute before trying again.";
-    case "over_request_rate_limit": return "Too many attempts. Please wait a minute and try again.";
-    case "signup_disabled": return "New sign-ups are currently disabled.";
-    case "email_provider_disabled": return "Email sign-in is disabled. Use another sign-in method.";
-    case "email_address_invalid": return "Enter a valid email address.";
-    case "email_address_not_authorized": return "Email delivery isn’t set up for this app yet, so we can’t email this address. Log in with your password instead.";
-    case "otp_expired": return "That link has expired. Request a new one.";
-    case "flow_state_not_found":
-    case "flow_state_expired":
-    case "bad_code_verifier": return "Open the link in the same browser you requested it from, or request a new one.";
-    case "session_not_found":
-    case "session_expired":
-    case "refresh_token_not_found": return "Your session has expired. Please start again.";
-    case "provider_disabled": return "This sign-in method isn’t enabled. Log in with your email and password.";
-    case "unexpected_audience": return "This sign-in method is misconfigured. Log in with your email and password.";
-    case "user_banned": return "This account has been suspended.";
-    case "captcha_failed": return "Captcha verification failed. Please try again.";
-    case "reauthentication_needed": return "For security, log in again before changing your password.";
-  }
-  if (/failed to fetch|networkerror|network request failed|load failed/i.test(msg)) return "Can’t reach the server. Check your connection and try again.";
-  if (/invalid login credentials/i.test(msg)) return "Incorrect email or password.";
-  if (/user already registered/i.test(msg)) return "An account with this email already exists.";
-  if (/email not confirmed/i.test(msg)) return "Please confirm your email address first. Check your inbox for the link.";
-  if (/auth session missing/i.test(msg)) return "Your session has expired. Please start again.";
-  if (/code verifier|both auth code and code verifier/i.test(msg)) return "Open the link in the same browser you requested it from, or request a new one.";
-  if (/(link|token).*(invalid|expired)|(invalid|expired).*(link|token)/i.test(msg)) return "That link is invalid or has expired. Request a new one.";
-  return msg || "Something went wrong. Please try again.";
+  if (e.code === "weak_password") return weakPassword(e.reasons, msg);
+  return lookup(CODE_MESSAGES, e.code) ?? messagePattern(msg) ?? (msg || "Something went wrong. Please try again.");
+}
+
+/**
+ * Copy for a `/login?error=` value. The parameter is attacker-controllable, so this only ever
+ * returns fixed strings: known codes map to their copy, anything else (unknown codes, or free
+ * text from old links) becomes the generic link error. Null when there is no error.
+ */
+export function authErrorFromCode(code: string | null | undefined): string | null {
+  const c = code?.trim();
+  if (!c) return null;
+  if (AUTH_CODE_RE.test(c)) return lookup(CODE_MESSAGES, c) ?? lookup(LINK_CODES, c) ?? LINK_ERROR;
+  // Not code-shaped (a legacy free-text description): classify it, never echo it.
+  return c.length <= 300 ? messagePattern(c) ?? LINK_ERROR : LINK_ERROR;
 }
 
 /** Rough password strength (0–4) for the meter under new-password fields. */

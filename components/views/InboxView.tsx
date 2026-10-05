@@ -53,6 +53,13 @@ export default function InboxView() {
 
   const list = useMemo(() => {
     const t = Date.now(); // fresh clock on every recompute; `now` only forces a periodic refresh
+    /** when the row (re)entered the inbox: an expired snooze resurfaces it at its wake time */
+    const at = (n: Notification) => {
+      const c = Date.parse(n.created_at);
+      if (!n.snoozed_until) return c;
+      const s = Date.parse(n.snoozed_until);
+      return s <= t ? Math.max(c, s) : c;
+    };
     return mine
       .filter((n) => {
         const snoozed = isSnoozed(n, t);
@@ -60,7 +67,9 @@ export default function InboxView() {
         if (snoozed) return false;
         return tab === "all" || !n.read_at || kept.has(n.id);
       })
-      .sort((a, b) => b.created_at.localeCompare(a.created_at));
+      .sort(tab === "snoozed"
+        ? (a, b) => Date.parse(a.snoozed_until as string) - Date.parse(b.snoozed_until as string) // wakes soonest first
+        : (a, b) => at(b) - at(a) || b.created_at.localeCompare(a.created_at));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mine, tab, kept, now]);
 

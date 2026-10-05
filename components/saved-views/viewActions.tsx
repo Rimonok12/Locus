@@ -6,7 +6,7 @@ import { useSync } from "@/lib/sync/store";
 import { toast, ui } from "@/lib/ui";
 import { navigate } from "@/lib/router";
 import { useIsAdmin, useMeId } from "@/lib/model";
-import { createView, deleteView, isFavorite, toggleFavorite } from "@/lib/sync/actions";
+import { createView, deleteView, toggleFavorite } from "@/lib/sync/actions";
 import { IconButton } from "@/components/primitives/controls";
 import type { DisplayOptions, FavoriteKind, Filter, View } from "@/lib/types";
 
@@ -66,7 +66,6 @@ export function confirmDeleteView(view: View, beforeDelete?: () => void) {
     destructive: true,
     onConfirm: async () => {
       beforeDelete?.();
-      if (isFavorite("view", view.id)) toggleFavorite("view", view.id);
       await deleteView(view.id);
     },
   });

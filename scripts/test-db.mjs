@@ -27,6 +27,10 @@ const PRELUDE = `
   grant usage on schema auth to anon, authenticated;
   grant execute on function auth.uid() to anon, authenticated;
   grant usage on schema public to anon, authenticated;
+  -- Supabase grants the API roles their own privileges on every object the migration role creates
+  alter default privileges in schema public grant all on tables    to anon, authenticated, service_role;
+  alter default privileges in schema public grant all on sequences to anon, authenticated, service_role;
+  alter default privileges in schema public grant all on functions to anon, authenticated, service_role;
 `;
 
 let passed = 0;
@@ -103,6 +107,22 @@ ok((await as(carol, `select * from profiles`)).rows.length === 1, "outsider stil
 const link = (await as(bob, `insert into workspace_invites (workspace_id) values ($1) returning token`, [ws.id])).rows[0];
 ok(!!link.token, "members can create open invite links");
 ok(!!(await fails(bob, `insert into workspace_invites (workspace_id, role) values ($1, 'admin')`, [ws.id])), "only admins can invite admins");
+const planted = (await as(bob, `insert into workspace_invites (workspace_id, token, expires_at, created_at)
+  values ($1, 'acmeacme', null, now() + interval '1 year') returning token, expires_at, created_at`, [ws.id])).rows[0];
+ok(planted.token !== "acmeacme" && planted.expires_at && new Date(planted.created_at) <= new Date(),
+  "invite token, expiry and creation time are server-owned");
+
+console.log("\nfunction privileges");
+const anyIssue = (await as(alice, `select id from issues limit 1`)).rows[0].id;
+ok(!!(await fails(carol, `select public.notify_user($1, $2, $3, 'status', null, null, '{}'::jsonb)`, [ws.id, alice, bob])), "outsider cannot forge notifications");
+ok(!!(await fails(bob, `select public.notify_user($1, $2, $3, 'status', null, null, '{}'::jsonb)`, [ws.id, alice, carol])), "members cannot forge notifications");
+ok(!!(await fails(carol, `select public._create_team($1, 'X', 'ZZZ', null, '#000000')`, [ws.id])), "outsider cannot call _create_team");
+ok(!!(await fails(carol, `select public.subscribe_user($1, $2)`, [anyIssue, alice])), "outsider cannot call subscribe_user");
+
+console.log("\nopaque membership keys");
+ok(!!(await as(alice, `select id from team_members limit 1`)).rows[0].id, "membership rows carry an opaque id (realtime DELETE payloads leak no pairs)");
+ok(!(await fails(alice, `insert into issue_subscribers (issue_id, workspace_id, user_id) values ($1, $2, $3) on conflict (issue_id, user_id) do nothing`,
+  [anyIssue, ws.id, alice])), "natural-key upsert still works");
 
 console.log("\nissues");
 const created = (await as(bob, `insert into issues (team_id, workspace_id, title, state_id, assignee_id, priority)
@@ -172,6 +192,44 @@ const cy2 = (await as(alice, `insert into cycles (team_id, workspace_id, starts_
 ok(cy1.number === 1 && cy2.number === 2, "cycles numbered per team");
 ok(!!(await fails(alice, `update issues set cycle_id = $1 where id = $2`, [cy2.id, created.id])), "cycle must belong to the issue's team");
 
+console.log("\ntenant integrity");
+const elseWs = (await as(carol, `select * from create_workspace('Else', 'else-co')`)).rows[0];
+const elseProj = (await as(carol, `insert into projects (workspace_id, name) values ($1, 'Else project') returning id`, [elseWs.id])).rows[0].id;
+const carolUpd = (await as(carol, `insert into project_updates (project_id, workspace_id, health, body) values ($1, $2, 'on_track', 'hi') returning id`,
+  [elseProj, elseWs.id])).rows[0].id;
+// filterless writes read no column, so only the UPDATE policy (not SELECT) is checked
+await as(carol, `update project_updates set project_id = $1`, [proj.id]);
+await as(carol, `update project_updates set workspace_id = $1`, [ws.id]);
+const cu = (await as(carol, `select project_id, workspace_id from project_updates where id = $1`, [carolUpd])).rows[0];
+ok(cu && cu.project_id === elseProj && cu.workspace_id === elseWs.id, "project updates cannot be re-homed into another workspace");
+ok((await as(alice, `select count(*)::int as c from project_updates where id = $1`, [carolUpd])).rows[0].c === 0, "the other workspace never sees the injected update");
+const ws3 = (await as(alice, `select * from create_workspace('Acme Two', 'acme-two')`)).rows[0];
+const proj3 = (await as(alice, `insert into projects (workspace_id, name) values ($1, 'Other') returning id`, [ws3.id])).rows[0].id;
+await as(alice, `insert into project_milestones (project_id, workspace_id, name) values ($1, $2, 'M1')`, [proj.id, ws.id]);
+ok(!!(await fails(alice, `update project_milestones set project_id = $1 where true`, [proj3])), "milestones cannot move to another workspace's project");
+const wideLabel = (await as(alice, `select id from labels where workspace_id = $1 and team_id is null limit 1`, [ws.id])).rows[0].id;
+await as(alice, `update labels set workspace_id = $1 where id = $2`, [ws3.id, wideLabel]);
+ok((await as(alice, `select workspace_id from labels where id = $1`, [wideLabel])).rows[0].workspace_id === ws.id, "workspace-wide labels cannot change workspace");
+await as(alice, `insert into issue_relations (workspace_id, issue_id, related_issue_id, type) values ($1, $2, $3, 'blocks')`, [ws.id, created.id, child.id]);
+ok(!!(await fails(alice, `update issue_relations set type = 'related'`)), "relations cannot be re-pointed after insert");
+ok(!!(await fails(alice, `insert into comments (issue_id, workspace_id, body, parent_id) values ($1, $2, '<p>x</p>', $3)`, [created.id, ws.id, c.id])),
+  "replies must belong to their parent's issue");
+await as(alice, `delete from workspaces where id = $1`, [ws3.id]);
+await as(carol, `delete from workspaces where id = $1`, [elseWs.id]);
+
+console.log("\ntext limits");
+ok(!!(await fails(alice, `update issues set description = repeat('x', 200001) where id = $1`, [created.id])), "issue descriptions are capped");
+ok(!!(await fails(alice, `update profiles set display_name = repeat('x', 33) where id = $1`, [alice])), "display names are capped");
+await db.exec("reset role");
+await db.exec(`alter table issues disable trigger issues_text_limits`);
+await db.query(`update issues set description = repeat('y', 200001) where id = $1`, [created.id]);
+await db.exec(`alter table issues enable trigger issues_text_limits`);
+ok(!(await fails(alice, `update issues set priority = 3 where id = $1`, [created.id])), "a legacy over-long description does not block other edits");
+await db.query(`update issues set description = '' where id = $1`, [created.id]);
+const longUser = await mk("christopher.alexander.montgomery.long@x.dev", "");
+ok((await db.query(`select char_length(display_name)::int as n from profiles where id = $1`, [longUser])).rows[0].n <= 32,
+  "long auto-generated display names are clamped at signup");
+
 console.log("\nnotifications privacy");
 const aliceNote = (await as(alice, `select id from notifications limit 1`)).rows[0].id;
 ok((await as(bob, `select * from notifications where id = $1`, [aliceNote])).rows.length === 0, "cannot read others' notifications");
@@ -193,7 +251,49 @@ ok(!!(await fails(alice, `delete from workspace_members where user_id = $1`, [al
 ok(!!(await fails(alice, `update workspace_members set role = 'member' where user_id = $1`, [alice])), "last admin cannot demote self");
 ok(!!(await fails(bob, `update workspace_members set role = 'admin' where user_id = $1 returning *`, [bob])) ||
   (await as(bob, `update workspace_members set role = 'admin' where user_id = $1 returning *`, [bob])).rows.length === 0, "members cannot promote themselves");
+
+console.log("\nmember removal");
+const bobLink = (await as(bob, `insert into workspace_invites (workspace_id) values ($1) returning token`, [ws.id])).rows[0];
+await as(bob, `insert into workspace_invites (workspace_id, email) values ($1, 'bob.alt@acme.dev')`, [ws.id]);
+const aliceLink = (await as(alice, `insert into workspace_invites (workspace_id) values ($1) returning token`, [ws.id])).rows[0];
+const tmpLabel = (await as(alice, `insert into labels (workspace_id, name) values ($1, 'Temp') returning id`, [ws.id])).rows[0].id;
+const parentIssue = (await as(alice, `insert into issues (team_id, workspace_id, title) values ($1, $2, 'Parent') returning id`, [team.id, ws.id])).rows[0].id;
+const launch = (await as(alice, `insert into projects (workspace_id, name, lead_id, member_ids) values ($1, 'Launch 2', $2, array[$2::uuid, $3::uuid]) returning id`,
+  [ws.id, bob, alice])).rows[0].id;
+const ms = (await as(alice, `insert into project_milestones (project_id, workspace_id, name) values ($1, $2, 'Beta') returning id`, [launch, ws.id])).rows[0].id;
+const cy3 = (await as(alice, `insert into cycles (team_id, workspace_id, starts_at, ends_at) values ($1, $2, '2026-11-02', '2026-11-16') returning id`, [team.id, ws.id])).rows[0].id;
+const bobIssue = (await as(alice, `insert into issues (team_id, workspace_id, title, assignee_id, label_ids, cycle_id, project_id, milestone_id, parent_id)
+  values ($1, $2, 'Owned by Bob', $3, array[$4::uuid], $5, $6, $7, $8) returning id`, [team.id, ws.id, bob, tmpLabel, cy3, launch, ms, parentIssue])).rows[0].id;
+const bobC = (await as(bob, `insert into comments (issue_id, workspace_id, body) values ($1, $2, '<p>mine</p>') returning id`, [bobIssue, ws.id])).rows[0].id;
+const aliceReply = (await as(alice, `insert into comments (issue_id, workspace_id, body, parent_id) values ($1, $2, '<p>reply</p>', $3) returning id`,
+  [bobIssue, ws.id, bobC])).rows[0].id;
+ok((await as(alice, `delete from workspace_members where user_id = $1 returning user_id`, [bob])).rows.length === 1, "admin removes a member");
+ok(!!(await fails(bob, `select accept_invite($1)`, [aliceLink.token])), "removed member cannot rejoin through the shared link");
+ok(!!(await fails(bob, `select accept_invite($1)`, [bobLink.token])), "removed member cannot rejoin through a link they minted");
+ok((await as(alice, `select count(*)::int as c from workspace_invites where accepted_at is null`)).rows[0].c === 0, "removal revokes every invite the member could use");
+ok((await as(alice, `select assignee_id from issues where id = $1`, [bobIssue])).rows[0].assignee_id === null, "departed member's issues are unassigned");
+const lp = (await as(alice, `select lead_id, member_ids from projects where id = $1`, [launch])).rows[0];
+ok(lp.lead_id === null && !lp.member_ids.includes(bob), "departed member loses project lead and membership");
+await db.exec("reset role");
+ok((await db.query(`select count(*)::int as c from issue_subscribers where user_id = $1 and workspace_id = $2`, [bob, ws.id])).rows[0].c === 0,
+  "departed member stops following issues");
+await as(bob, `update comments set body = '<p>pwn</p>'`);
+await as(bob, `delete from comments`);
+const cm = (await as(alice, `select id, body from comments where id = any($1::uuid[])`, [[bobC, aliceReply]])).rows;
+ok(cm.length === 2 && cm.find((x) => x.id === bobC).body === "<p>mine</p>", "removed member cannot edit or delete old comments (filterless writes)");
+ok(!(await fails(alice, `update issues set title = 'Still editable' where id = $1`, [bobIssue])), "issues stay editable after their assignee leaves");
+ok(!(await fails(alice, `delete from labels where id = $1`, [tmpLabel])), "label delete still cascades");
+ok(!(await fails(alice, `insert into project_updates (project_id, workspace_id, health, body) values ($1, $2, 'on_track', 'ok')`, [launch, ws.id])), "project updates still post");
+ok(!(await fails(alice, `delete from project_milestones where id = $1`, [ms])), "milestone delete still cascades");
+ok(!(await fails(alice, `delete from cycles where id = $1`, [cy3])), "cycle delete still cascades");
+ok(!(await fails(alice, `delete from issues where id = $1`, [parentIssue])), "parent delete still cascades");
+ok(!(await fails(alice, `delete from projects where id = $1`, [launch])), "project delete still cascades");
+ok(!!(await fails(alice, `update issues set assignee_id = $1 where id = $2`, [bob, bobIssue])), "cannot assign a departed member");
+const reinv = (await as(alice, `insert into workspace_invites (workspace_id, email) values ($1, 'bob@acme.dev') returning token`, [ws.id])).rows[0];
+ok((await as(bob, `select accept_invite($1) as slug`, [reinv.token])).rows[0].slug === "acme", "admins can re-invite a removed member");
+const keep = (await as(alice, `insert into workspace_invites (workspace_id) values ($1) returning token`, [ws.id])).rows[0];
 ok((await as(bob, `delete from workspace_members where user_id = $1 returning *`, [bob])).rows.length === 1, "member can leave");
+ok((await as(alice, `select count(*)::int as c from workspace_invites where token = $1`, [keep.token])).rows[0].c === 1, "leaving voluntarily keeps the shared link");
 ok((await as(bob, `select * from issues`)).rows.length === 0, "after leaving, no access");
 
 console.log("\nfavorites cleanup");
@@ -203,6 +303,17 @@ await as(alice, `insert into favorites (workspace_id, user_id, kind, target_id) 
 await as(alice, `delete from issues where id = $1`, [favIssue]);
 await as(alice, `delete from projects where id = $1`, [proj.id]);
 ok((await as(alice, `select count(*)::int as c from favorites`)).rows[0].c === 0, "favorites removed when their issue/project is deleted");
+
+console.log("\nupdated_at clock");
+await db.exec("reset role");
+const clk = await db.transaction(async (tx) => {
+  await tx.exec(`do $$ declare t timestamptz := clock_timestamp(); begin while clock_timestamp() < t + interval '3 ms' loop end loop; end $$;`);
+  const i = (await tx.query(`update issues set title = 'clock' where id = $1 returning updated_at > now() as later`, [created.id])).rows[0];
+  const t = (await tx.query(`update teams set name = name where id = $1 returning updated_at > now() as later`, [team.id])).rows[0];
+  const p = (await tx.query(`update profiles set name = name where id = $1 returning updated_at > now() as later`, [alice])).rows[0];
+  return { i, t, p };
+});
+ok(clk.i.later && clk.t.later && clk.p.later, "updated_at is stamped at write time (clock_timestamp), not transaction start");
 
 console.log("\nworkspace delete cascade");
 ok((await as(alice, `delete from workspaces where id = $1 returning id`, [ws.id])).rows.length === 1, "admin deletes workspace (full cascade succeeds)");

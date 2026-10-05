@@ -500,10 +500,30 @@ export function CopyButton({ text, what = "Link copied", label = "Copy", compact
 
 export const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 
-/** Validate a picked image file (type + ≤ 2 MB). Toasts and returns null when invalid. */
-export function acceptImage(file: File | undefined | null): File | null {
+/** MIME types the `avatars` storage bucket accepts (mirrors its allowed_mime_types). */
+export const AVATAR_IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"] as const;
+
+const IMAGE_TYPE_LABEL: Record<string, string> = {
+  "image/png": "PNG", "image/jpeg": "JPG", "image/gif": "GIF", "image/webp": "WebP", "image/svg+xml": "SVG", "image/avif": "AVIF",
+};
+
+/** "PNG, JPG, GIF or WebP" */
+function typeList(types: readonly string[]): string {
+  const names = Array.from(new Set(types.map((t) => IMAGE_TYPE_LABEL[t] ?? t.replace(/^image\//, "").toUpperCase())));
+  return names.length > 1 ? `${names.slice(0, -1).join(", ")} or ${names[names.length - 1]}` : names[0] ?? "";
+}
+
+/**
+ * Validate a picked image file (type + ≤ 2 MB). Toasts and returns null when invalid.
+ * Pass `types` to restrict to an exact MIME list (e.g. a storage bucket's allowed types);
+ * without it any `image/*` passes.
+ */
+export function acceptImage(file: File | undefined | null, types?: readonly string[]): File | null {
   if (!file) return null;
-  if (!file.type.startsWith("image/")) { toast.error("Please choose an image file."); return null; }
+  if (types && types.length > 0 ? !types.includes(file.type) : !file.type.startsWith("image/")) {
+    toast.error(types && types.length > 0 ? `Use a ${typeList(types)} image.` : "Please choose an image file.");
+    return null;
+  }
   if (file.size > MAX_IMAGE_BYTES) { toast.error("Images must be 2 MB or smaller."); return null; }
   return file;
 }

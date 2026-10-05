@@ -24,8 +24,10 @@ export interface Workspace {
   created_at: ISODate; updated_at: ISODate;
 }
 
+/* Membership-style rows are keyed by their natural key in the client; `id` is an opaque
+   database key (it keeps realtime DELETE payloads from revealing who belongs where). */
 export interface WorkspaceMember {
-  workspace_id: UUID; user_id: UUID; role: Role; created_at: ISODate;
+  id?: UUID; workspace_id: UUID; user_id: UUID; role: Role; created_at: ISODate;
 }
 
 export interface WorkspaceInvite {
@@ -40,7 +42,7 @@ export interface Team {
   created_at: ISODate; updated_at: ISODate; archived_at: ISODate | null;
 }
 
-export interface TeamMember { team_id: UUID; user_id: UUID; workspace_id: UUID; created_at: ISODate; }
+export interface TeamMember { id?: UUID; team_id: UUID; user_id: UUID; workspace_id: UUID; created_at: ISODate; }
 
 export interface WorkflowState {
   id: UUID; workspace_id: UUID; team_id: UUID; name: string; type: StateType; color: string;
@@ -90,7 +92,7 @@ export interface IssueRelation {
   created_by: UUID | null; created_at: ISODate;
 }
 
-export interface IssueSubscriber { issue_id: UUID; user_id: UUID; workspace_id: UUID; created_at: ISODate; }
+export interface IssueSubscriber { id?: UUID; issue_id: UUID; user_id: UUID; workspace_id: UUID; created_at: ISODate; }
 
 export interface Comment {
   id: UUID; workspace_id: UUID; issue_id: UUID; parent_id: UUID | null; user_id: UUID | null; body: string;

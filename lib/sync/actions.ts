@@ -2,7 +2,9 @@
 /* ─── Locus · domain actions (every write the UI performs goes through here) ─── */
 
 import { supabase } from "@/lib/supabase/client";
-import { insert, mergeRows, dropRows, remove, removeMany, rpc, update, updateMany, useSync, uuid } from "@/lib/sync/store";
+import {
+  deferRemove, expectWorkspaceExit, insert, mergeRows, dropRows, remove, rpc, update, updateMany, useSync, uuid,
+} from "@/lib/sync/store";
 import { toast } from "@/lib/ui";
 import { navigate } from "@/lib/router";
 import { between, defaultStateFor, issueKey, todayISO } from "@/lib/model";
@@ -88,25 +90,52 @@ export function toggleIssueLabel(ids: string[], labelId: string) {
   }
 }
 
+/**
+ * Move issues to another team. Until the server hands out the new team's number the local row
+ * shows KEY-… (number 0), so the old number never reads as another issue's identifier or URL.
+ * The state is mapped by type locally, as the server does.
+ */
+export function moveIssuesToTeam(ids: string[], teamId: string) {
+  const s = S();
+  return Promise.all(ids.map((id) => {
+    const issue = s.issues[id];
+    if (!issue || issue.team_id === teamId) return Promise.resolve(true);
+    const st = defaultStateFor(teamId, s.workflow_states, s.workflow_states[issue.state_id]?.type);
+    return updateIssue(id, { team_id: teamId, cycle_id: null, number: 0, ...(st ? { state_id: st.id } : {}) });
+  }));
+}
+
 export function moveIssue(id: string, patch: Partial<Issue>, neighbours: { prev?: number; next?: number }) {
   return updateIssue(id, { ...patch, sort_order: between(neighbours.prev, neighbours.next) });
 }
 
+/** Undo window of a delete; a little longer than the toast that offers it (7s). */
+const DELETE_UNDO_MS = 7500;
+
+/**
+ * Delete issues with a real undo: the issues disappear at once, but the server delete is only
+ * sent when the undo window closes (or the page is hidden / closed). Undo therefore restores
+ * everything — comments, history, relations, sub-issue links, favorites — untouched.
+ */
 export async function deleteIssues(ids: string[]) {
   const s = S();
   const rows = ids.map((id) => s.issues[id]).filter(Boolean) as Issue[];
   if (!rows.length) return;
-  const ok = await removeMany("issues", rows.map((r) => r.id), "Couldn't delete");
-  if (!ok) return;
-  toast(rows.length === 1 ? `Deleted ${issueKey(rows[0])}` : `Deleted ${rows.length} issues`, {
+  const gone = new Set(rows.map((r) => r.id));
+  const label = rows.length === 1 ? `Deleted ${issueKey(rows[0])}` : `Deleted ${rows.length} issues`;
+  const handle = deferRemove("issues", rows.map((r) => r.id), DELETE_UNDO_MS, {
+    what: "Couldn't delete",
+    onCommitted: () => {
+      // sub-issues lose their parent server-side (FK set null); mirror locally
+      const cur = S();
+      mergeRows("issues", Object.values(cur.issues).filter((i) => i.parent_id && gone.has(i.parent_id)).map((i) => ({ ...i, parent_id: null })));
+    },
+  });
+  if (!handle) return;
+  toast(label, {
     label: "Undo",
-    run: async () => {
-      // children first-class: parents re-inserted before sub-issues
-      const sorted = [...rows].sort((a, b) => (a.parent_id ? 1 : 0) - (b.parent_id ? 1 : 0));
-      for (const r of sorted) {
-        const { workspace_id: _w, created_at: _c, updated_at: _u, ...rest } = r;
-        await insert("issues", rest, "Couldn't restore");
-      }
+    run: () => {
+      if (!handle.undo()) toast.error("Too late to undo — the delete already went through.");
     },
   });
 }
@@ -330,15 +359,20 @@ export function markNotificationsRead(ids: string[], read = true) {
 }
 export function markAllNotificationsRead() {
   const s = S();
-  markNotificationsRead(Object.values(s.notifications).filter((n) => !n.read_at).map((n) => n.id));
+  const now = Date.now();
+  // still-snoozed reminders stay unread so they resurface as new
+  markNotificationsRead(Object.values(s.notifications)
+    .filter((n) => !n.read_at && !(n.snoozed_until && Date.parse(n.snoozed_until) > now))
+    .map((n) => n.id));
 }
 export async function archiveNotifications(ids: string[]): Promise<boolean> {
   const ok = await updateMany("notifications", ids, { archived_at: new Date().toISOString(), read_at: new Date().toISOString() });
   if (ok) dropRows("notifications", ids);
   return ok;
 }
+/** Snoozed items come back unread when the snooze ends (like Linear), so the reminder is noticed. */
 export function snoozeNotifications(ids: string[], until: Date) {
-  return updateMany("notifications", ids, { snoozed_until: until.toISOString(), read_at: new Date().toISOString() });
+  return updateMany("notifications", ids, { snoozed_until: until.toISOString(), read_at: null });
 }
 export function unsnoozeNotifications(ids: string[]) {
   return updateMany("notifications", ids, { snoozed_until: null });
@@ -348,7 +382,14 @@ export function unsnoozeNotifications(ids: string[]) {
 
 export const updateProfile = (patch: Partial<Profile>) => update("profiles", S().userId, patch, "Couldn't update profile");
 
+/** Raster images only — the storage buckets refuse anything else (SVG / HTML would be served as active content). */
+export const UPLOAD_IMAGE_TYPES: readonly string[] = ["image/png", "image/jpeg", "image/gif", "image/webp", "image/avif"];
+
 async function upload(bucket: "avatars" | "attachments", folder: string, file: File): Promise<string | null> {
+  if (!UPLOAD_IMAGE_TYPES.includes(file.type)) {
+    toast.error("Only PNG, JPEG, GIF, WebP or AVIF images can be uploaded.");
+    return null;
+  }
   const ext = (file.name.split(".").pop() || "bin").toLowerCase().replace(/[^a-z0-9]/g, "");
   const path = `${folder}/${uuid()}.${ext}`;
   const { error } = await supabase().storage.from(bucket).upload(path, file, { cacheControl: "31536000", upsert: false, contentType: file.type });
@@ -370,8 +411,9 @@ export async function uploadWorkspaceLogo(file: File) {
 }
 export async function deleteWorkspace() {
   const id = S().workspaceId;
+  expectWorkspaceExit(true); // our own membership disappears with it: not a "you were removed"
   const { error } = await supabase().from("workspaces").delete().eq("id", id);
-  if (error) { toast.error(`Couldn't delete workspace: ${error.message}`); return false; }
+  if (error) { expectWorkspaceExit(false); toast.error(`Couldn't delete workspace: ${error.message}`); return false; }
   window.location.assign("/");
   return true;
 }
@@ -385,8 +427,10 @@ export const inviteLink = (token: string) => `${window.location.origin}/join/${t
 export const setMemberRole = (userId: string, role: Role) => update("workspace_members", userId, { role }, "Couldn't change role");
 export const removeMember = (userId: string) => remove("workspace_members", userId, "Couldn't remove member");
 export async function leaveWorkspace() {
+  expectWorkspaceExit(true);
   const ok = await remove("workspace_members", S().userId, "Couldn't leave workspace");
-  if (ok) window.location.assign("/");
+  if (!ok) { expectWorkspaceExit(false); return; }
+  window.location.assign("/");
 }
 
 /** Create a workspace (onboarding / workspace switcher). Returns the slug. */

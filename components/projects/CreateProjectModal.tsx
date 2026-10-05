@@ -159,7 +159,7 @@ function CreateProjectForm({ onClose, defaultTeamId }: { onClose: () => void; de
           onKeyDown={(e) => { if (e.key === "Enter" && !e.metaKey && !e.ctrlKey) e.preventDefault(); }}
           placeholder="Add a short summary…"
           aria-label="Summary"
-          className="mt-2 w-full bg-transparent text-[14px] text-dim outline-none placeholder:text-faint"
+          className="mt-2 w-full bg-transparent text-[16px] text-dim outline-none placeholder:text-faint sm:text-[14px]"
         />
 
         <div className="mt-4">

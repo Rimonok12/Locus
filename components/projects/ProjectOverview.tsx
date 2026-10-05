@@ -79,7 +79,7 @@ export default function ProjectOverview({ project }: { project: Project }) {
             maxLength={255}
             aria-label="Summary"
             placeholder="Add a short summary…"
-            className="mt-1.5 w-full text-[14px] text-dim sm:text-[15px]"
+            className="mt-1.5 w-full text-[16px] text-dim sm:text-[15px]"
           />
 
           <div className="mt-5">

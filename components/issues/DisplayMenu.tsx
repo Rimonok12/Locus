@@ -197,7 +197,7 @@ function Select<T extends string>({
         aria-label={label}
         value={value}
         onChange={(e) => onChange(e.target.value as T)}
-        className="focus-ring h-8 min-w-[132px] cursor-pointer appearance-none rounded-md border border-line-strong bg-surface pl-2.5 pr-7 text-[12.5px] text-ink outline-none transition-colors hover:bg-wash sm:h-7"
+        className="focus-ring h-8 min-w-[132px] cursor-pointer appearance-none rounded-md border border-line-strong bg-surface pl-2.5 pr-7 text-[16px] text-ink outline-none transition-colors hover:bg-wash sm:h-7 sm:text-[12.5px]"
       >
         {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
       </select>

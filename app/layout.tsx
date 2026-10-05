@@ -1,4 +1,4 @@
-import type { Metadata, Viewport } from "next";
+import type { Metadata } from "next";
 import "@fontsource-variable/inter";
 import "./globals.css";
 
@@ -14,15 +14,10 @@ export const metadata: Metadata = {
   },
 };
 
-export const viewport: Viewport = {
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#fcfcfd" },
-    { media: "(prefers-color-scheme: dark)", color: "#141518" },
-  ],
-};
-
-/* Apply the saved theme before first paint (no flash). */
-const themeScript = `(function(){try{var t=JSON.parse(localStorage.getItem('locus:theme')||'"system"');var d=t==='dark'||(t==='system'&&matchMedia('(prefers-color-scheme: dark)').matches);var e=document.documentElement;if(d)e.classList.add('dark');e.style.colorScheme=d?'dark':'light';}catch(_){}})();`;
+/* Apply the saved theme before first paint (no flash), including the browser chrome color.
+   The theme-color tag is ours, not Next's (no `viewport.themeColor`): lib/ui applyTheme() keeps it in
+   sync with the in-app theme, and React never re-mounts or removes it. Colors match --canvas. */
+const themeScript = `(function(){try{var t=JSON.parse(localStorage.getItem('locus:theme')||'"system"');var d=t==='dark'||(t==='system'&&matchMedia('(prefers-color-scheme: dark)').matches);var e=document.documentElement;if(d)e.classList.add('dark');e.style.colorScheme=d?'dark':'light';var m=document.querySelector('meta[name="theme-color"]');if(!m){m=document.createElement('meta');m.setAttribute('name','theme-color');document.head.appendChild(m);}m.setAttribute('content',d?'#141518':'#fcfcfd');}catch(_){}})();`;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

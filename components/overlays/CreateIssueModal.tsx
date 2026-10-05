@@ -1,9 +1,9 @@
 "use client";
 /* ─── Locus · create issue modal (C) ─────────────────────────────────────────
    Title + rich description + property chips. The draft persists to localStorage
-   while typing and comes back the next time the modal opens — wherever it is
-   opened from, with that place's context (team, status, project, cycle…) applied
-   on top. Openers that create something specific (a sub-issue, a prefilled
+   (one slot per user per workspace) while typing and comes back the next time
+   the modal opens — wherever it is opened from, with that place's context
+   (team, status, project, cycle…) applied on top. Openers that create something specific (a sub-issue, a prefilled
    title) start fresh and never overwrite a saved draft. "Create more" keeps the
    modal open with the same properties.
    ──────────────────────────────────────────────────────────────────────────── */
@@ -31,7 +31,13 @@ import type { Issue, Priority } from "@/lib/types";
 
 /* ═══ draft storage ═══ */
 
-const DRAFT_KEY = "locus:issue-draft";
+/** the old unscoped slot: its owner (user / workspace) can't be known, so it is dropped, never restored */
+const LEGACY_DRAFT_KEY = "locus:issue-draft";
+/** the draft slot for the signed-in user in the current workspace (null before bootstrap) */
+function draftKeyNow(): string | null {
+  const { userId, workspaceId } = useSync.getState();
+  return userId && workspaceId ? `locus:issue-draft:${userId}:${workspaceId}` : null;
+}
 const CREATE_MORE_KEY = "locus:create-more";
 
 interface Props {
@@ -67,9 +73,11 @@ function propsFrom(src: Partial<Record<keyof Props, unknown>>): Props {
   };
 }
 
-function readDraft(): Draft | null {
+function readDraft(key: string | null): Draft | null {
   try {
-    const raw = window.localStorage.getItem(DRAFT_KEY);
+    window.localStorage.removeItem(LEGACY_DRAFT_KEY);
+    if (!key) return null;
+    const raw = window.localStorage.getItem(key);
     if (!raw) return null;
     const d = JSON.parse(raw) as Partial<Draft> | null;
     if (!d || typeof d !== "object") return null;
@@ -83,11 +91,13 @@ function readDraft(): Draft | null {
     return null;
   }
 }
-function writeDraft(d: Draft) {
-  try { window.localStorage.setItem(DRAFT_KEY, JSON.stringify(d)); } catch { /* storage unavailable */ }
+function writeDraft(key: string | null, d: Draft) {
+  if (!key) return;
+  try { window.localStorage.setItem(key, JSON.stringify(d)); } catch { /* storage unavailable */ }
 }
-function clearDraft() {
-  try { window.localStorage.removeItem(DRAFT_KEY); } catch { /* storage unavailable */ }
+function clearDraft(key: string | null) {
+  if (!key) return;
+  try { window.localStorage.removeItem(key); } catch { /* storage unavailable */ }
 }
 const draftHasContent = (d: Pick<Draft, "title" | "description">) => Boolean(d.title.trim()) || !isEmptyHtml(d.description);
 
@@ -111,6 +121,8 @@ const PROP_KEYS: (keyof Props)[] = [
 ];
 
 interface Init {
+  /** this composer's draft slot, fixed at mount so late callbacks hit the slot the text came from (null: nothing persists) */
+  draftKey: string | null;
   /** the stored draft was restored into this composer */
   restored: boolean;
   /** this composer may write the draft slot (false when it would clobber someone else's saved draft) */
@@ -134,14 +146,16 @@ function freshState(defaults: Partial<Issue>): Pick<Init, "teamId" | "title" | "
 function initialState(defaults: Partial<Issue>): Init {
   // defaults that say *what* is being created (vs. where): the draft must not replace them
   const specific = Boolean(defaults.title || defaults.description || defaults.parent_id);
-  const stored = readDraft();
+  const draftKey = draftKeyNow();
+  const stored = readDraft(draftKey);
   const draft = stored && draftHasContent(stored) ? stored : null;
-  if (!draft) return { restored: false, persist: true, ...freshState(defaults) };
-  if (specific) return { restored: false, persist: false, ...freshState(defaults) };
+  if (!draft) return { draftKey, restored: false, persist: true, ...freshState(defaults) };
+  if (specific) return { draftKey, restored: false, persist: false, ...freshState(defaults) };
   // continue the draft here: the opener's context (team, status, project, cycle, assignee…) wins
   const context: Partial<Record<keyof Props, unknown>> = {};
   for (const k of PROP_KEYS) if (defaults[k] !== undefined) context[k] = defaults[k];
   return {
+    draftKey,
     restored: true,
     persist: true,
     teamId: defaults.team_id ?? draft.team_id,
@@ -201,12 +215,12 @@ function Composer({ defaults }: { defaults: Partial<Issue> }) {
     if (!dirty.current || !init.persist) return;
     const d: Draft = { team_id: teamId, title, description, props };
     if (!draftHasContent(d)) {
-      if (ownsDraft.current) { clearDraft(); ownsDraft.current = false; }
+      if (ownsDraft.current) { clearDraft(init.draftKey); ownsDraft.current = false; }
       return;
     }
-    writeDraft(d);
+    writeDraft(init.draftKey, d);
     ownsDraft.current = true;
-  }, [init.persist, teamId, title, description, props]);
+  }, [init.draftKey, init.persist, teamId, title, description, props]);
 
   /* focus the title with the caret at the end */
   useEffect(() => {
@@ -249,7 +263,7 @@ function Composer({ defaults }: { defaults: Partial<Issue> }) {
 
   /** throw the restored draft away and start over from this opener's defaults */
   const discardDraft = () => {
-    if (ownsDraft.current) clearDraft();
+    if (ownsDraft.current) clearDraft(init.draftKey);
     ownsDraft.current = false;
     dirty.current = false;
     const fresh = freshState(defaults);
@@ -298,15 +312,15 @@ function Composer({ defaults }: { defaults: Partial<Issue> }) {
       setEditorKey((k) => k + 1);
       requestAnimationFrame(() => titleRef.current?.focus());
     } else {
-      if (ownsDraft.current) clearDraft();
+      if (ownsDraft.current) clearDraft(init.draftKey);
       ownsDraft.current = false;
       ui.closeCreateIssue();
     }
 
     createIssue(payload).then((issue) => {
       if (issue) {
-        const stored = readDraft();
-        if (init.persist && stored && stored.title === snapshot.title && stored.description === snapshot.description) clearDraft();
+        const stored = readDraft(init.draftKey);
+        if (init.persist && stored && stored.title === snapshot.title && stored.description === snapshot.description) clearDraft(init.draftKey);
         return;
       }
       // failed (already toasted): give the text back so nothing is lost
@@ -315,8 +329,8 @@ function Composer({ defaults }: { defaults: Partial<Issue> }) {
         setTitle(snapshot.title);
         setDescription(snapshot.description);
         setEditorKey((k) => k + 1);
-      } else if (!readDraft()) {
-        writeDraft(snapshot);
+      } else if (!readDraft(init.draftKey)) {
+        writeDraft(init.draftKey, snapshot);
       }
     });
   };

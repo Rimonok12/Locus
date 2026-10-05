@@ -2,27 +2,41 @@
 /* ─── Locus · workspace client root: bootstrap the sync engine, then render the shell ─── */
 
 import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import { bootstrap, teardown, useSync } from "@/lib/sync/store";
 import { applyTheme, useUI } from "@/lib/ui";
 import type { Profile, Workspace } from "@/lib/types";
 import { LocusMark } from "@/components/primitives/icons";
 import { Button } from "@/components/primitives/controls";
+import ErrorBoundary from "./ErrorBoundary";
 import Shell from "./Shell";
 
 export default function WorkspaceApp({ workspace, profile }: { workspace: Workspace; profile: Profile }) {
   const status = useSync((s) => s.status);
   const error = useSync((s) => s.error);
+  const slug = useSync((s) => s.workspaces[s.workspaceId]?.slug);
   const theme = useUI((s) => s.theme);
+  const pathname = usePathname();
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     setMounted(true);
     bootstrap({ workspace, profile });
-    try { localStorage.setItem("locus:last-workspace", workspace.slug); } catch { /* ignore */ }
-    document.cookie = `locus_ws=${workspace.slug}; path=/; max-age=31536000; samesite=lax`;
     return () => teardown();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspace.id]);
+
+  // Keep the URL, the "last workspace" cookie and localStorage on the current slug — another admin may
+  // rename it while this tab is open (realtime / refresh), and a stale link may push the old slug back.
+  useEffect(() => {
+    if (!slug || status !== "ready") return;
+    const { pathname: p, search, hash } = window.location;
+    const current = p.split("/")[1] ?? "";
+    // null state (not history.state) so Next's patched replaceState updates usePathname
+    if (current && current !== slug) window.history.replaceState(null, "", p.replace(/^\/[^/]+/, `/${slug}`) + search + hash);
+    try { localStorage.setItem("locus:last-workspace", slug); } catch { /* ignore */ }
+    document.cookie = `locus_ws=${slug}; path=/; max-age=31536000; samesite=lax`;
+  }, [slug, pathname, status]);
 
   useEffect(() => {
     applyTheme(theme);
@@ -34,19 +48,28 @@ export default function WorkspaceApp({ workspace, profile }: { workspace: Worksp
   }, [theme]);
 
   if (!mounted || status === "idle" || status === "loading") return <BootScreen />;
-  if (status === "error") {
-    return (
-      <div className="flex h-screen flex-col items-center justify-center gap-4 bg-canvas px-6 text-center">
-        <LocusMark size={32} />
-        <div>
-          <h1 className="text-[15px] font-semibold text-ink">Couldn’t load your workspace</h1>
-          <p className="mt-1 text-[13px] text-dim">{error}</p>
-        </div>
-        <Button variant="primary" onClick={() => window.location.reload()}>Try again</Button>
+  if (status === "error") return <Fatal title="Couldn’t load your workspace" message={error} />;
+  return (
+    <ErrorBoundary fallback={(e, reset) => <Fatal title="Something went wrong" message={e.message} onRetry={reset} />}>
+      <Shell />
+    </ErrorBoundary>
+  );
+}
+
+function Fatal({ title, message, onRetry }: { title: string; message: string | null; onRetry?: () => void }) {
+  return (
+    <div className="flex h-[100dvh] flex-col items-center justify-center gap-4 bg-canvas px-6 text-center">
+      <LocusMark size={32} />
+      <div>
+        <h1 className="text-[15px] font-semibold text-ink">{title}</h1>
+        {message && <p className="mt-1 max-w-md text-[13px] text-dim">{message}</p>}
       </div>
-    );
-  }
-  return <Shell />;
+      <div className="flex gap-2">
+        {onRetry && <Button variant="primary" onClick={onRetry}>Try again</Button>}
+        <Button variant={onRetry ? "secondary" : "primary"} onClick={() => window.location.reload()}>Reload</Button>
+      </div>
+    </div>
+  );
 }
 
 function BootScreen() {

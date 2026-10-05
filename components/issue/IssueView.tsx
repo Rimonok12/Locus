@@ -7,8 +7,8 @@
    so moving it to another team (which renumbers it) follows it to its new URL.
    `embedded` renders it inside a parent pane (the inbox): a compact 44px bar
    (identifier, issue actions, open full page) instead of the ViewHeader, and
-   none of the URL-driving behaviour (follow-the-key, Escape → back, J/K →
-   previous/next). Defaults to "not on the issue route". `header={false}` drops
+   none of the URL-driving behaviour (follow-the-key, Escape → back to the
+   list, J/K → previous/next). Defaults to "not on the issue route". `header={false}` drops
    the compact bar for a parent that renders its own (IssueHeaderActions with
    context="embedded" gives that bar the same actions).
    ──────────────────────────────────────────────────────────────────────────── */
@@ -42,6 +42,27 @@ interface Pin { id: string; keys: string[] }
 type Mode = "page" | "embedded" | "bare";
 
 const NO_IDS: string[] = [];
+
+/* Minimal shape of the Navigation API (not in this TS lib's Window typings). */
+interface NavEntry { readonly index: number; readonly sameDocument: boolean }
+interface NavApi { readonly currentEntry: NavEntry | null; entries(): NavEntry[] }
+
+/**
+ * True when the previous history entry is one of this app's own client-side navigations, so
+ * Escape may `history.back()`. `history.length` can't tell: it also counts other sites, the
+ * login page a sign-in redirected from, and entries from before a full reload. Uses the per-entry
+ * index the router stamps into history.state (`locusIdx`) when present, else the Navigation API's
+ * same-document flag; with neither, it answers false and the caller falls back to the team list.
+ */
+function canGoBackInApp(): boolean {
+  const state: unknown = window.history.state;
+  const idx = state && typeof state === "object" ? (state as { locusIdx?: unknown }).locusIdx : undefined;
+  if (typeof idx === "number") return idx > 0;
+  const nav = (window as Window & { navigation?: NavApi }).navigation;
+  const current = nav?.currentEntry;
+  if (!nav || !current || current.index <= 0) return false;
+  return nav.entries()[current.index - 1]?.sameDocument === true;
+}
 
 export default function IssueView({ identifier, embedded, header = true }: {
   identifier: string;
@@ -194,7 +215,9 @@ function IssuePage({ issue, navIds, routed, mode }: { issue: Issue; navIds: stri
     if (useUI.getState().focusedId === issueId) ui.setFocused(null);
   }, [issueId]);
 
-  // routed page only — Escape (nothing open, not typing, nothing selected) → back · J / K → next / previous issue
+  /* routed page only — Escape (nothing open, not typing, nothing selected) → back to the in-app page the user
+     came from, else (deep link, other site or sign-in before it) the issue's team list, replacing this entry
+     so Back from the list doesn't reopen the dismissed issue · J / K → next / previous issue */
   const teamKey = team?.key;
   const navRef = useRef(navIds);
   navRef.current = navIds;
@@ -213,8 +236,8 @@ function IssuePage({ issue, navIds, routed, mode }: { issue: Issue; navIds: stri
       const u = useUI.getState();
       if (u.peekIssueId || u.selected.length) return;
       e.preventDefault();
-      if (window.history.length > 1) window.history.back();
-      else navigate(teamKey ? { kind: "team", key: teamKey, tab: "all" } : { kind: "my-issues", tab: "assigned" });
+      if (canGoBackInApp()) window.history.back();
+      else navigate(teamKey ? { kind: "team", key: teamKey, tab: "all" } : { kind: "my-issues", tab: "assigned" }, { replace: true });
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);

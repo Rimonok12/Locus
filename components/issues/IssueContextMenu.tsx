@@ -8,9 +8,10 @@ import {
 import { useSync } from "@/lib/sync/store";
 import { ui, useUI, type PickerKind } from "@/lib/ui";
 import { issueKey } from "@/lib/model";
-import { archiveIssues, copyText, deleteIssues, duplicateIssue, issueUrl, toggleFavorite } from "@/lib/sync/actions";
+import { copyText, duplicateIssue, issueUrl, toggleFavorite } from "@/lib/sync/actions";
 import { Popover } from "@/components/primitives/overlay";
 import { ActionMenu, type ActionItem } from "@/components/primitives/SelectMenu";
+import { archiveTargets, confirmDeleteIssues } from "@/components/overlays/commands";
 import type { MenuRequest } from "./useListInteractions";
 import type { Issue } from "@/lib/types";
 
@@ -36,11 +37,9 @@ export default function IssueContextMenu({ menu, onClose }: { menu: MenuRequest 
       return targets.map((id) => all[id]).filter((x): x is Issue => Boolean(x));
     };
     const pick = (kind: PickerKind) => () => ui.openPicker(kind, targets);
-    const dropFromSelection = () => {
-      const gone = new Set(targets);
-      const sel = useUI.getState().selected;
-      if (sel.some((id) => gone.has(id))) ui.setSelected(sel.filter((id) => !gone.has(id)));
-    };
+    // archive / delete go through the shared commands (palette, bulk bar, ⌘⌫ use them too): besides the
+    // write they drop the ids from the selection, close a peek showing them and move list focus to the
+    // neighbouring row, so J/K continue from where the issue was instead of jumping to the ends
     return [
       { id: "status", label: "Status…", icon: <CircleDashed size={14} />, hint: "S", onSelect: pick("status") },
       { id: "priority", label: "Priority…", icon: <SignalHigh size={14} />, hint: "P", onSelect: pick("priority") },
@@ -69,22 +68,11 @@ export default function IssueContextMenu({ menu, onClose }: { menu: MenuRequest 
       { id: "duplicate", label: "Duplicate", icon: <CopyPlus size={14} />, onSelect: () => { duplicateIssue(issue.id); } },
       {
         id: "archive", divider: true, label: many ? `Archive ${targets.length} issues` : "Archive", icon: <Archive size={14} />,
-        onSelect: () => { archiveIssues(targets); dropFromSelection(); },
+        onSelect: () => archiveTargets(targets),
       },
       {
         id: "delete", label: many ? `Delete ${targets.length} issues` : "Delete", icon: <Trash2 size={14} />, danger: true,
-        onSelect: () => ui.askConfirm({
-          title: many ? `Delete ${targets.length} issues?` : `Delete ${key}?`,
-          body: many
-            ? "These issues and their comments will be deleted. You can undo right after."
-            : `“${issue.title || "Untitled"}” and its comments will be deleted. You can undo right after.`,
-          confirmLabel: "Delete",
-          destructive: true,
-          onConfirm: async () => {
-            await deleteIssues(targets);
-            dropFromSelection();
-          },
-        }),
+        onSelect: () => confirmDeleteIssues(targets),
       },
     ];
   }, [issue, selected, favorite]);

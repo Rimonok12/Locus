@@ -13,6 +13,11 @@ type Rec<T> = Record<string, T>;
 
 /* ═══ constants ═══ */
 
+/** Max length of rich-text HTML (issue / project descriptions, project updates); the DB enforces it too. */
+export const MAX_DOC_CHARS = 200_000;
+/** Toast copy for a document over MAX_DOC_CHARS (skip the write: it would be rejected). */
+export const DOC_TOO_LONG = "This is too long to save — keep it under 200,000 characters (attach large logs as files).";
+
 export const STATE_TYPES: StateType[] = ["backlog", "unstarted", "started", "completed", "canceled"];
 export const STATE_TYPE_ORDER: Record<StateType, number> = { backlog: 0, unstarted: 1, started: 2, completed: 3, canceled: 4 };
 export const STATE_TYPE_LABEL: Record<StateType, string> = {

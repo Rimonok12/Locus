@@ -3,14 +3,15 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { SUPABASE_ANON_KEY, SUPABASE_URL, isSupabaseConfigured } from "@/lib/env";
+import { safeNext as sanitize, sameOriginUrl } from "@/lib/safe-next";
 
 const PUBLIC_PREFIXES = ["/login", "/signup", "/forgot-password", "/reset-password", "/auth", "/join", "/setup"];
 
-/** same-origin relative paths only */
+/** same-origin relative paths only, never back to the auth pages */
 function safeNext(next: string | null): string {
-  if (!next || !next.startsWith("/") || next.startsWith("//") || next.startsWith("/\\") || /[\s\u0000-\u001f]/.test(next)) return "/";
-  if (/^\/(login|signup)(\/|\?|$)/.test(next)) return "/"; // never bounce back to the auth pages
-  return next;
+  const n = sanitize(next);
+  if (!n || /^\/(login|signup)(\/|\?|$)/.test(n)) return "/";
+  return n;
 }
 
 export async function middleware(request: NextRequest) {
@@ -47,7 +48,7 @@ export async function middleware(request: NextRequest) {
   }
   if (user && (path === "/login" || path === "/signup")) {
     const next = safeNext(request.nextUrl.searchParams.get("next"));
-    return NextResponse.redirect(new URL(next, request.url));
+    return NextResponse.redirect(sameOriginUrl(next, request.nextUrl.origin));
   }
   return response;
 }

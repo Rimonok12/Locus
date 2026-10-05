@@ -23,7 +23,8 @@ export default function LoginForm({ next, initialError }: { next: string | null;
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [resending, setResending] = useState(false);
-  const [error, setError] = useState<string | null>(initialError ? authErrorMessage(initialError) : null);
+  // initialError is already mapped to safe, fixed copy by authErrorFromCode on the server.
+  const [error, setError] = useState<string | null>(initialError);
   const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({});
   const [unconfirmed, setUnconfirmed] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);

@@ -167,7 +167,7 @@ function UpdateItem({ update: u, previous }: { update: ProjectUpdate; previous?:
               label="Delete update"
               onClick={remove}
               size={30}
-              className="transition-opacity md:opacity-0 md:focus-visible:opacity-100 md:group-hover:opacity-100"
+              className="transition-opacity md:opacity-0 md:focus-visible:opacity-100 md:group-hover:opacity-100 [@media(hover:none)]:opacity-100"
             >
               <Trash2 size={14} />
             </IconButton>

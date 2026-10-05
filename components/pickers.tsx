@@ -6,14 +6,14 @@
      • PropertyChip       anchored trigger + menu bound to a single issue field
    ──────────────────────────────────────────────────────────────────────────── */
 
-import { useMemo, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { CalendarDays, Circle, CircleSlash, Hexagon, RefreshCw, Tag, Triangle, UserRound } from "lucide-react";
 import { useSync } from "@/lib/sync/store";
 import {
   ESTIMATES, PRIORITIES, cycleName, cyclePhase, displayName, issueKey, sortStates, useLabels, useMembers,
   useProjects, useTeams, useTeamStates, useTeamCycles, PRIORITY_LABEL, todayISO,
 } from "@/lib/model";
-import { createLabel, setIssuesState, toggleIssueLabel, updateIssue, updateIssues } from "@/lib/sync/actions";
+import { createLabel, moveIssuesToTeam, setIssuesState, toggleIssueLabel, updateIssues } from "@/lib/sync/actions";
 import { addDaysISO, dueInfo, formatDate, localToday } from "@/lib/format";
 import { COLORS } from "@/lib/model";
 import { SelectMenu, type MenuItem } from "@/components/primitives/SelectMenu";
@@ -167,26 +167,91 @@ export function DueDateMenu({ value, onChange }: { value: string | null; onChang
   );
 }
 
-export function ParentMenu({ issue, onChange }: { issue: Pick<Issue, "id" | "parent_id" | "team_id">; onChange: (parentId: string | null) => void }) {
+const PARENT_RESULTS = 50;
+
+/** Every issue below `roots` (and the roots themselves). */
+function withDescendants(roots: Iterable<string>, issues: Record<string, Issue>): Set<string> {
+  const children = new Map<string, string[]>();
+  for (const i of Object.values(issues)) {
+    if (!i.parent_id) continue;
+    const list = children.get(i.parent_id);
+    if (list) list.push(i.id); else children.set(i.parent_id, [i.id]);
+  }
+  const out = new Set<string>();
+  const stack = Array.from(roots).filter(Boolean);
+  while (stack.length) {
+    const id = stack.pop()!;
+    if (out.has(id)) continue;
+    out.add(id);
+    for (const c of children.get(id) ?? []) stack.push(c);
+  }
+  return out;
+}
+
+/**
+ * Parent picker. Searches the whole workspace (ranked: exact key, number / key prefix, title prefix,
+ * all words) instead of a capped list. `exclude` adds more issues that must not become the parent —
+ * all bulk targets — together with their descendants, since one cycle fails a whole bulk update.
+ */
+export function ParentMenu({
+  issue, exclude, onChange,
+}: { issue: Pick<Issue, "id" | "parent_id" | "team_id">; exclude?: string[]; onChange: (parentId: string | null) => void }) {
   const issues = useSync((s) => s.issues);
   const teams = useSync((s) => s.teams);
-  const states = useSync((s) => s.workflow_states);
+  const [query, setQuery] = useState("");
+  const excludeKey = (exclude ?? []).join(",");
+  const eligible = useMemo(() => {
+    const blocked = withDescendants([issue.id, ...(excludeKey ? excludeKey.split(",") : [])], issues);
+    return Object.values(issues).filter((i) => !blocked.has(i.id) && !i.archived_at);
+  }, [issues, issue.id, excludeKey]);
+  const needle = query.trim().toLowerCase();
+
   const items: MenuItem[] = useMemo(() => {
-    // exclude self and descendants
-    const blocked = new Set<string>([issue.id]);
-    let grew = true;
-    while (grew) {
-      grew = false;
-      for (const i of Object.values(issues)) if (i.parent_id && blocked.has(i.parent_id) && !blocked.has(i.id)) { blocked.add(i.id); grew = true; }
+    const byRecent = (a: Issue, b: Issue) => b.updated_at.localeCompare(a.updated_at);
+    let list: Issue[];
+    if (!needle) {
+      list = [...eligible].sort(byRecent).slice(0, PARENT_RESULTS);
+      // keep the current parent visible (and checked) even when it is not recent
+      const current = issue.parent_id ? issues[issue.parent_id] : undefined;
+      if (current && !list.includes(current) && eligible.includes(current)) list = [current, ...list];
+    } else {
+      const dashed = needle.replace(/^([a-z][a-z0-9]*)\s+(\d+)$/, "$1-$2"); // "eng 12" → "eng-12"
+      const tokens = needle.split(/\s+/).filter(Boolean);
+      const digits = /^\d+$/.test(needle);
+      const ranked: { i: Issue; r: number }[] = [];
+      for (const i of eligible) {
+        const teamKey = (teams[i.team_id]?.key ?? "").toLowerCase();
+        const key = `${teamKey}-${i.number}`;
+        const title = i.title.toLowerCase();
+        let r = -1;
+        if (key === needle || key === dashed) r = 0;
+        else if ((digits && String(i.number) === needle) || (needle.includes("-") && key.startsWith(needle))) r = 1;
+        else if (title.startsWith(needle)) r = 2;
+        else if (tokens.every((t) => title.includes(t) || t === teamKey || t === key || t === String(i.number))) r = 3;
+        if (r >= 0) ranked.push({ i, r });
+      }
+      ranked.sort((a, b) => a.r - b.r || byRecent(a.i, b.i));
+      list = ranked.slice(0, PARENT_RESULTS).map((x) => x.i);
     }
+    const showNone = !needle || "no parent issue".includes(needle) || needle === "none";
     return [
-      { id: NONE, label: "No parent issue", icon: <Circle size={13} className="text-faint" /> },
-      ...Object.values(issues).filter((i) => !blocked.has(i.id) && !i.archived_at)
-        .sort((a, b) => b.updated_at.localeCompare(a.updated_at)).slice(0, 400)
-        .map((i) => ({ id: i.id, label: `${issueKey(i, teams)} ${i.title}`, icon: <StateGlyph stateId={i.state_id} />, keywords: [states[i.state_id]?.name ?? ""] })),
+      ...(showNone ? [{ id: NONE, label: "No parent issue", icon: <Circle size={13} className="text-faint" /> }] : []),
+      ...list.map((i) => ({ id: i.id, label: `${issueKey(i, teams)} ${i.title}`, icon: <StateGlyph stateId={i.state_id} /> })),
     ];
-  }, [issues, teams, states, issue.id]);
-  return <SelectMenu items={items} selected={issue.parent_id ?? NONE} onSelect={(id) => onChange(id === NONE ? null : id)} placeholder="Set parent issue…" digitShortcuts={false} />;
+  }, [eligible, needle, issues, teams, issue.parent_id]);
+
+  return (
+    <SelectMenu
+      items={items}
+      shouldFilter={false}
+      onQueryChange={setQuery}
+      selected={issue.parent_id ?? NONE}
+      onSelect={(id) => onChange(id === NONE ? null : id)}
+      placeholder="Set parent issue…"
+      digitShortcuts={false}
+      emptyText="No matching issues"
+    />
+  );
 }
 
 /* ═══ bulk / keyboard picker bound to issue ids ═══ */
@@ -225,11 +290,20 @@ export function IssuePicker({ kind, issueIds, onDone }: { kind: PickerKind; issu
     case "estimate":
       return <EstimateMenu value={same("estimate")} onChange={done((e: number | null) => updateIssues(ids, { estimate: e }))} />;
     case "team":
-      return <TeamMenu value={singleTeam ? first.team_id : null} onChange={done((t: string) => { for (const id of ids) if (issues[id].team_id !== t) updateIssue(id, { team_id: t, cycle_id: null }); })} />;
+      return <TeamMenu value={singleTeam ? first.team_id : null} onChange={done((t: string) => { void moveIssuesToTeam(ids, t); })} />;
     case "due":
       return <DueDateMenu value={same("due_date")} onChange={done((d: string | null) => updateIssues(ids, { due_date: d }))} />;
-    case "parent":
-      return <ParentMenu issue={first} onChange={done((p: string | null) => updateIssues(ids, { parent_id: p }))} />;
+    case "parent": {
+      // all targets (and their sub-issues) are excluded; the check mark shows only a shared parent
+      const pick = (p: string | null) => {
+        // safeguard if the store changed while the menu was open: never make an issue its own ancestor
+        const above = new Set<string>();
+        for (let cur = p ? issues[p] : undefined; cur && !above.has(cur.id); cur = cur.parent_id ? issues[cur.parent_id] : undefined) above.add(cur.id);
+        const targets = ids.filter((id) => !above.has(id));
+        if (targets.length) void updateIssues(targets, { parent_id: p });
+      };
+      return <ParentMenu issue={{ id: first.id, team_id: first.team_id, parent_id: same("parent_id") }} exclude={ids} onChange={done(pick)} />;
+    }
   }
 }
 
@@ -251,38 +325,29 @@ const chipCls =
 export function PropertyChip({
   issue, kind, variant = "sidebar", emptyLabel,
 }: { issue: Issue; kind: PickerKind; variant?: "sidebar" | "chip" | "icon"; emptyLabel?: string }) {
-  const workflow_states = useSync((x) => x.workflow_states);
-  const profiles = useSync((x) => x.profiles);
-  const projects = useSync((x) => x.projects);
-  const project_milestones = useSync((x) => x.project_milestones);
-  const cycles = useSync((x) => x.cycles);
-  const teams = useSync((x) => x.teams);
+  // narrow selectors: a chip only re-renders when the one entity it shows changes
+  const state = useSync((x) => (kind === "status" ? x.workflow_states[issue.state_id] : undefined));
+  const assignee = useSync((x) => (kind === "assignee" && issue.assignee_id ? x.profiles[issue.assignee_id] : undefined));
+  const project = useSync((x) => (kind === "project" && issue.project_id ? x.projects[issue.project_id] : undefined));
+  const milestone = useSync((x) => (kind === "milestone" && issue.milestone_id ? x.project_milestones[issue.milestone_id] : undefined));
+  const cycle = useSync((x) => (kind === "cycle" && issue.cycle_id ? x.cycles[issue.cycle_id] : undefined));
+  const team = useSync((x) => (kind === "team" ? x.teams[issue.team_id] : undefined));
   const parent = useSync((x) => (kind === "parent" && issue.parent_id ? x.issues[issue.parent_id] : undefined));
-  const s = { workflow_states, profiles, projects, project_milestones, cycles, teams };
+  const parentTeam = useSync((x) => (parent ? x.teams[parent.team_id] : undefined));
   const content = useMemo((): { icon: ReactNode; label: string; empty: boolean } => {
     switch (kind) {
-      case "status": {
-        const st = s.workflow_states[issue.state_id];
-        return { icon: <StateGlyph stateId={issue.state_id} />, label: st?.name ?? "Status", empty: false };
-      }
+      case "status":
+        return { icon: <StateGlyph stateId={issue.state_id} />, label: state?.name ?? "Status", empty: false };
       case "priority":
         return { icon: <PriorityIcon priority={issue.priority} className="text-dim" />, label: PRIORITY_LABEL[issue.priority], empty: issue.priority === 0 };
-      case "assignee": {
-        const p = issue.assignee_id ? s.profiles[issue.assignee_id] : undefined;
-        return { icon: <Avatar profile={p ?? null} size={16} />, label: p ? displayName(p) : "Assign", empty: !p };
-      }
-      case "project": {
-        const p = issue.project_id ? s.projects[issue.project_id] : undefined;
-        return { icon: p ? <ProjectIcon icon={p.icon} color={p.color} /> : <Hexagon size={14} className="text-faint" />, label: p?.name ?? "Add to project", empty: !p };
-      }
-      case "milestone": {
-        const m = issue.milestone_id ? s.project_milestones[issue.milestone_id] : undefined;
-        return { icon: <Triangle size={13} className={m ? "text-dim" : "text-faint"} />, label: m?.name ?? "Add milestone", empty: !m };
-      }
-      case "cycle": {
-        const c = issue.cycle_id ? s.cycles[issue.cycle_id] : undefined;
-        return { icon: <RefreshCw size={13} className={c ? "text-dim" : "text-faint"} />, label: c ? cycleName(c) : "Add to cycle", empty: !c };
-      }
+      case "assignee":
+        return { icon: <Avatar profile={assignee ?? null} size={16} />, label: assignee ? displayName(assignee) : "Assign", empty: !assignee };
+      case "project":
+        return { icon: project ? <ProjectIcon icon={project.icon} color={project.color} /> : <Hexagon size={14} className="text-faint" />, label: project?.name ?? "Add to project", empty: !project };
+      case "milestone":
+        return { icon: <Triangle size={13} className={milestone ? "text-dim" : "text-faint"} />, label: milestone?.name ?? "Add milestone", empty: !milestone };
+      case "cycle":
+        return { icon: <RefreshCw size={13} className={cycle ? "text-dim" : "text-faint"} />, label: cycle ? cycleName(cycle) : "Add to cycle", empty: !cycle };
       case "estimate":
         return { icon: <Triangle size={13} className={issue.estimate != null ? "text-dim" : "text-faint"} />, label: issue.estimate != null ? `${issue.estimate} point${issue.estimate === 1 ? "" : "s"}` : "Set estimate", empty: issue.estimate == null };
       case "due": {
@@ -293,20 +358,18 @@ export function PropertyChip({
           empty: !d,
         };
       }
-      case "team": {
-        const t = s.teams[issue.team_id];
-        return { icon: <TeamIcon team={t} size={16} />, label: t?.name ?? "Team", empty: false };
-      }
-      case "parent": {
-        const p = parent;
-        return { icon: <StateGlyph stateId={p?.state_id} />, label: p ? `${issueKey(p, s.teams)} ${p.title}` : "Set parent", empty: !p };
-      }
-      case "labels": {
+      case "team":
+        return { icon: <TeamIcon team={team} size={16} />, label: team?.name ?? "Team", empty: false };
+      case "parent":
+        return {
+          icon: <StateGlyph stateId={parent?.state_id} />,
+          label: parent ? `${issueKey(parent, parentTeam ? { [parentTeam.id]: parentTeam } : {})} ${parent.title}` : "Set parent",
+          empty: !parent,
+        };
+      case "labels":
         return { icon: <Tag size={13} className="text-faint" />, label: issue.label_ids.length ? `${issue.label_ids.length} labels` : "Add label", empty: !issue.label_ids.length };
-      }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [kind, issue, workflow_states, profiles, projects, project_milestones, cycles, teams, parent]);
+  }, [kind, issue, state, assignee, project, milestone, cycle, team, parent, parentTeam]);
 
   return (
     <Dropdown

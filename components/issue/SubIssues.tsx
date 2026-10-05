@@ -61,7 +61,7 @@ function AddSubIssue({ parent, onClose, inputRef: ref }: { parent: Issue; onClos
         }}
         onBlur={() => { if (!title.trim()) onClose(); }}
         placeholder="Sub-issue title — Enter to add, Esc to close"
-        className="h-9 min-w-0 flex-1 bg-transparent text-[13px] text-ink outline-none placeholder:text-faint"
+        className="h-9 min-w-0 flex-1 bg-transparent text-[16px] text-ink outline-none placeholder:text-faint sm:text-[13px]"
       />
       <button
         type="submit"

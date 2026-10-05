@@ -1,7 +1,7 @@
 "use client";
 /* ─── Locus · basic controls ─── */
 
-import { forwardRef, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type TextareaHTMLAttributes } from "react";
+import { forwardRef, useEffect, useRef, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type TextareaHTMLAttributes } from "react";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/cn";
 
@@ -122,14 +122,17 @@ export function Kbd({ children, className = "" }: { children: ReactNode; classNa
 /** Hover tooltip with optional shortcut hint. */
 export function Tooltip({ label, shortcut, children, side = "bottom" }: { label: ReactNode; shortcut?: string[]; children: ReactNode; side?: "top" | "bottom" | "right" }) {
   const [show, setShow] = useState(false);
-  let timer: ReturnType<typeof setTimeout> | undefined;
+  // a ref, not a render-local: a re-render between enter and leave must not orphan the timer
+  const timer = useRef<ReturnType<typeof setTimeout>>();
+  const cancel = () => { if (timer.current !== undefined) { clearTimeout(timer.current); timer.current = undefined; } };
+  useEffect(() => cancel, []);
   const pos = side === "top" ? "bottom-full mb-1.5 left-1/2 -translate-x-1/2" : side === "right" ? "left-full ml-1.5 top-1/2 -translate-y-1/2" : "top-full mt-1.5 left-1/2 -translate-x-1/2";
   return (
     <span
       className="relative inline-flex"
-      onMouseEnter={() => { timer = setTimeout(() => setShow(true), 450); }}
-      onMouseLeave={() => { clearTimeout(timer); setShow(false); }}
-      onMouseDown={() => { clearTimeout(timer); setShow(false); }}
+      onMouseEnter={() => { cancel(); timer.current = setTimeout(() => { timer.current = undefined; setShow(true); }, 450); }}
+      onMouseLeave={() => { cancel(); setShow(false); }}
+      onMouseDown={() => { cancel(); setShow(false); }}
     >
       {children}
       {show && (

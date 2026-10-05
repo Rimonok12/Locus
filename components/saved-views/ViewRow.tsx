@@ -51,7 +51,7 @@ export function RenameInput({ initial, onDone, className = "" }: { initial: stri
         if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); finish(null); }
       }}
       aria-label="View name"
-      className={`h-7 min-w-0 rounded-md border border-accent bg-surface px-2 text-[13px] font-medium text-ink outline-none ring-2 ring-accent-soft ${className}`}
+      className={`h-8 min-w-0 rounded-md border border-accent bg-surface px-2 text-[16px] font-medium text-ink outline-none ring-2 ring-accent-soft sm:h-7 sm:text-[13px] ${className}`}
     />
   );
 }

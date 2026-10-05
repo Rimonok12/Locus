@@ -1,17 +1,42 @@
 "use client";
 /* ─── Locus · issue surfaces · shared pieces (group icons, row chips, toolbar button, helpers) ─── */
 
-import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from "react";
+import { forwardRef, useEffect, useRef, type ButtonHTMLAttributes, type ReactNode } from "react";
 import { CalendarDays, Hexagon, Layers, RefreshCw, Tag, Triangle } from "lucide-react";
 import { useSync } from "@/lib/sync/store";
 import { useUI } from "@/lib/ui";
-import { STATE_TYPES, STATE_TYPE_COLOR, cycleName, type IssueGroup, type QueryCtx } from "@/lib/model";
+import { STATE_TYPES, STATE_TYPE_COLOR, cycleName, useTeamByKey, type IssueGroup, type QueryCtx } from "@/lib/model";
+import { navigate, type Route } from "@/lib/router";
 import { dueInfo, formatDate, formatDateTime, shortAge } from "@/lib/format";
 import { Avatar } from "@/components/primitives/Avatar";
 import { LabelDot, PriorityIcon, ProgressRing, ProjectIcon, StateIcon, TeamIcon } from "@/components/primitives/icons";
 import { anyOverlayOpen } from "@/components/primitives/overlay";
 import { StateGlyph } from "@/components/pickers";
-import type { Filter, Priority, StateType } from "@/lib/types";
+import type { Filter, Priority, StateType, Team } from "@/lib/types";
+
+/* ═══ routing ═══ */
+
+/**
+ * Resolve the team for a URL key and keep it resolved if its key changes while the page is open
+ * (renamed by a teammate in real time): the team stays pinned by id and the URL is replaced with
+ * the new key instead of the view flipping to "not found". The pin only applies to the key it was
+ * made for, so navigating to an unknown key still misses, and a deleted team drops out of the store.
+ * `routeFor` builds this page's route for a key (read through a ref, so an inline arrow is fine).
+ */
+export function useRoutedTeam(teamKey: string | undefined, routeFor: (key: string) => Route): Team | undefined {
+  const byKey = useTeamByKey(teamKey);
+  const pin = useRef<{ id: string; key: string } | null>(null);
+  if (byKey && teamKey) pin.current = { id: byKey.id, key: teamKey };
+  const pinnedId = !byKey && pin.current && pin.current.key === teamKey ? pin.current.id : null;
+  const pinned = useSync((s) => (pinnedId ? s.teams[pinnedId] : undefined));
+  const team = byKey ?? pinned;
+  const routeRef = useRef(routeFor);
+  routeRef.current = routeFor;
+  useEffect(() => {
+    if (team && teamKey && team.key !== teamKey.toUpperCase()) navigate(routeRef.current(team.key), { replace: true });
+  }, [team, teamKey]);
+  return team;
+}
 
 /* ═══ small helpers ═══ */
 

@@ -7,7 +7,12 @@ import type { Profile, Workspace } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
+/** Mirrors the workspaces.slug check constraint. Probes like /robots.txt or /apple-touch-icon.png
+ *  (the middleware skips those extensions) 404 here without any auth or database round trip. */
+const SLUG_RE = /^[a-z0-9][a-z0-9-]{1,46}[a-z0-9]$/i;
+
 export default async function WorkspaceLayout({ params, children }: { params: { slug: string }; children: React.ReactNode }) {
+  if (!SLUG_RE.test(params.slug)) notFound();
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect(`/login?next=/${params.slug}`);
@@ -31,6 +36,7 @@ export default async function WorkspaceLayout({ params, children }: { params: { 
 }
 
 export async function generateMetadata({ params }: { params: { slug: string } }) {
+  if (!SLUG_RE.test(params.slug)) return { title: "Page not found" };
   const supabase = createClient();
   const { data } = await supabase.from("workspaces").select("name").eq("slug", params.slug.toLowerCase()).maybeSingle();
   return { title: data?.name ?? "Workspace" };

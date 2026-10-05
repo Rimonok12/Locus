@@ -65,7 +65,8 @@ export function ViewHeader({
 
 /** Pill-style tab used in headers ("All issues · Active · Backlog"). */
 export function HeaderTab({ to, active, children, onClick }: { to?: Route; active: boolean; children: ReactNode; onClick?: () => void }) {
-  const cls = `focus-ring inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border px-2.5 text-[12.5px] font-medium transition-colors ${
+  // 32px touch target where the tabs get their own row (phones), 28px in the header from sm up
+  const cls = `focus-ring inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border px-2.5 text-[12.5px] font-medium transition-colors sm:h-7 ${
     active ? "border-line-strong bg-surface text-ink shadow-card" : "border-transparent text-dim hover:bg-wash hover:text-ink"
   }`;
   if (to) return <a {...linkProps(to)} className={cls}>{children}</a>;

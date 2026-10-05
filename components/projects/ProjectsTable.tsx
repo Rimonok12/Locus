@@ -197,7 +197,7 @@ function ProjectRow({
               {p.target_date ? (
                 <span className="truncate tabular-nums">{formatDate(p.target_date)}</span>
               ) : (
-                <CalendarDays size={13} className={`text-faint transition-opacity ${t.open ? "" : "opacity-0 group-hover:opacity-100"}`} />
+                <CalendarDays size={13} className={`text-faint transition-opacity ${t.open ? "" : "opacity-0 group-hover:opacity-100 [@media(hover:none)]:opacity-100"}`} />
               )}
             </button>
           )}

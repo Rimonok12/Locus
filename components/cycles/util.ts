@@ -6,7 +6,7 @@ import { useSync } from "@/lib/sync/store";
 import { ui } from "@/lib/ui";
 import { cyclePhase, todayISO } from "@/lib/model";
 import { daysBetween, formatDate } from "@/lib/format";
-import { deleteCycle, isFavorite, toggleFavorite } from "@/lib/sync/actions";
+import { deleteCycle } from "@/lib/sync/actions";
 import type { Cycle, Issue, WorkflowState } from "@/lib/types";
 
 /** cycleName() that also copes with an optimistic row whose number hasn't come back yet */
@@ -82,7 +82,7 @@ export function cycleStats(issues: Issue[], states: Record<string, WorkflowState
 
 export const pct = (part: number, whole: number) => (whole ? Math.round((part / whole) * 100) : 0);
 
-/** Ask, then delete a cycle (and drop it from favorites). */
+/** Ask, then delete a cycle (favorites are removed by the favorites_cleanup trigger). */
 export function confirmDeleteCycle(cycle: Cycle, issueCount: number, afterConfirm?: () => void) {
   ui.askConfirm({
     title: `Delete ${cycleTitle(cycle)}?`,
@@ -93,7 +93,6 @@ export function confirmDeleteCycle(cycle: Cycle, issueCount: number, afterConfir
     destructive: true,
     onConfirm: async () => {
       afterConfirm?.();
-      if (isFavorite("cycle", cycle.id)) toggleFavorite("cycle", cycle.id);
       await deleteCycle(cycle.id);
     },
   });

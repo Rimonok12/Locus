@@ -139,5 +139,10 @@ kbd, .kbd {
 .prose-locus .mention-query { color: var(--accent); }
 .prose-locus p.is-editor-empty:first-child::before,
 .prose-locus .is-empty::before { content: attr(data-placeholder); float: left; color: var(--faint); pointer-events: none; height: 0; }
+/* iOS Safari zooms the page when focused editable text is under 16px: below Tailwind's sm breakpoint the
+   editable surface is 16px (headings scale via em). Read-only rich text keeps 14px / 13px. */
+@media (max-width: 639px) {
+  .prose-locus[contenteditable="true"] { font-size: 16px; }
+}
 .ProseMirror { outline: none; }
 .ProseMirror-selectednode { outline: 2px solid var(--accent); border-radius: 6px; }

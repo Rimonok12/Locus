@@ -68,7 +68,7 @@ function MilestoneRow({
         required
         aria-label="Milestone name"
         placeholder="Milestone name"
-        className="h-8 flex-1 rounded px-1 text-[13px] text-ink focus:bg-raised"
+        className="h-8 flex-1 rounded px-1 text-[16px] text-ink focus:bg-raised sm:text-[13px]"
       />
       <span
         className="flex shrink-0 items-center gap-1.5 text-[12px] tabular-nums text-dim"
@@ -110,7 +110,7 @@ function MilestoneRow({
         label="Delete milestone"
         onClick={remove}
         size={32}
-        className="transition-opacity md:opacity-0 md:focus-visible:opacity-100 md:group-hover:opacity-100"
+        className="transition-opacity md:opacity-0 md:focus-visible:opacity-100 md:group-hover:opacity-100 [@media(hover:none)]:opacity-100"
       >
         <Trash2 size={14} />
       </IconButton>
@@ -149,7 +149,7 @@ function AddMilestone({ projectId, first }: { projectId: string; first: boolean 
         }}
         placeholder={first ? "Add a milestone to break the project into stages…" : "Add milestone…"}
         aria-label="New milestone name"
-        className="h-8 min-w-0 flex-1 bg-transparent px-1 text-[13px] text-ink outline-none placeholder:text-faint"
+        className="h-8 min-w-0 flex-1 bg-transparent px-1 text-[16px] text-ink outline-none placeholder:text-faint sm:text-[13px]"
       />
       {typing && (
         <>

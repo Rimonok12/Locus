@@ -10,7 +10,9 @@ import { useMe, useMembers } from "@/lib/model";
 import { updateProfile, uploadAvatar } from "@/lib/sync/actions";
 import { Avatar } from "@/components/primitives/Avatar";
 import { Button, Input, Spinner } from "@/components/primitives/controls";
-import { Card, Row, Section, SettingsPage, TextField, acceptImage } from "./kit";
+import { AVATAR_IMAGE_TYPES, Card, Row, Section, SettingsPage, TextField, acceptImage } from "./kit";
+
+const AVATAR_ACCEPT = AVATAR_IMAGE_TYPES.join(",");
 
 const USERNAME = /^[a-z0-9._-]+$/;
 
@@ -28,7 +30,7 @@ export default function ProfileSettings() {
   if (!me) return null;
 
   const onFile = async (e: ChangeEvent<HTMLInputElement>) => {
-    const file = acceptImage(e.target.files?.[0]);
+    const file = acceptImage(e.target.files?.[0], AVATAR_IMAGE_TYPES);
     e.target.value = "";
     if (!file) return;
     setUploading(true);
@@ -73,7 +75,7 @@ export default function ProfileSettings() {
                 Remove
               </Button>
             )}
-            <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onFile} />
+            <input ref={fileRef} type="file" accept={AVATAR_ACCEPT} className="hidden" onChange={onFile} />
           </Row>
           <Row label="Full name" description="Shown on issues, comments and in the sidebar.">
             <TextField

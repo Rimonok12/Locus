@@ -118,7 +118,7 @@ function InboxRowImpl({
           {issue && <span className="shrink-0"><StateGlyph stateId={issue.state_id} size={13} /></span>}
           {!issue && project && <span className="shrink-0"><ProjectIcon icon={project.icon} color={project.color} size={13} /></span>}
           <span className={`min-w-0 flex-1 truncate text-[13px] ${unread ? "font-semibold text-ink" : "text-dim"}`}>{title}</span>
-          <span className={`shrink-0 text-xxs tabular-nums text-faint ${actionsVisible ? "md:invisible" : "md:group-hover:invisible"}`}>
+          <span className={`shrink-0 text-xxs tabular-nums text-faint ${actionsVisible ? "md:[@media(hover:hover)]:invisible" : "md:[@media(hover:hover)]:group-hover:invisible"}`}>
             {snoozedTab && n.snoozed_until
               ? <span className="inline-flex items-center gap-1"><AlarmClock size={11} />{snoozedUntilLabel(n.snoozed_until)}</span>
               : timeAgo(n.created_at)}
@@ -134,10 +134,10 @@ function InboxRowImpl({
         </div>
       </div>
 
-      {/* desktop hover actions */}
+      {/* hover actions: md+ with a pointer that can hover (touch tablets use the "…" menu) */}
       <div
         className={`absolute right-2 top-2 hidden items-center gap-0.5 rounded-md border border-line bg-surface p-0.5 shadow-card ${
-          actionsVisible ? "md:flex" : "md:group-hover:flex"
+          actionsVisible ? "md:[@media(hover:hover)]:flex" : "md:[@media(hover:hover)]:group-hover:flex"
         }`}
         onClick={(e) => e.stopPropagation()}
       >
@@ -154,8 +154,8 @@ function InboxRowImpl({
         <IconButton size={26} label="Archive (E)" onClick={() => onArchive(n.id)}><Archive size={14} /></IconButton>
       </div>
 
-      {/* mobile actions */}
-      <div className="shrink-0 md:hidden" onClick={(e) => e.stopPropagation()}>
+      {/* touch actions: below md, and on any screen without hover */}
+      <div className="shrink-0 md:[@media(hover:hover)]:hidden" onClick={(e) => e.stopPropagation()}>
         <Dropdown
           align="end"
           width={230}
