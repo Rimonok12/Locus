@@ -3,8 +3,7 @@
 
 import { useEffect } from "react";
 import { navigate, useRoute } from "@/lib/router";
-import { EmptyState, Button } from "@/components/primitives/controls";
-import { ViewHeader } from "./Header";
+import NotFound from "./NotFound";
 import TeamIssuesView from "@/components/views/TeamIssuesView";
 import MyIssuesView from "@/components/views/MyIssuesView";
 import InboxView from "@/components/views/InboxView";
@@ -43,17 +42,4 @@ export default function RouteView() {
     case "not-found":
       return <NotFound />;
   }
-}
-
-export function NotFound({ what = "page" }: { what?: string }) {
-  return (
-    <>
-      <ViewHeader title="Not found" />
-      <EmptyState
-        title={`This ${what} doesn’t exist`}
-        body="It may have been deleted, or you might not have access to it."
-        action={<Button variant="primary" onClick={() => navigate({ kind: "my-issues", tab: "assigned" })}>Go to My issues</Button>}
-      />
-    </>
-  );
 }
