@@ -1,0 +1,70 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─── Locus theme · Color Hunt ramp: F9F7F7 / DBE2EF / 3F72AF / 112D4E ─── */
+:root {
+  --canvas: #f9f7f7;
+  --surface: #ffffff;
+  --raised: #f1f3f9;
+  --line: #dbe2ef;
+  --ink: #112d4e;
+  --dim: #51688c;
+  --faint: #8aa0bf;
+  --accent: #3f72af;
+  --accent-ink: #ffffff;
+  --wash: #e8edf7;
+}
+.dark {
+  --canvas: #0c1a2c;
+  --surface: #112d4e;
+  --raised: #16365c;
+  --line: #24466e;
+  --ink: #f9f7f7;
+  --dim: #aabdd8;
+  --faint: #7390b5;
+  --accent: #6ea2dd;
+  --accent-ink: #0c1a2c;
+  --wash: #16365c;
+}
+
+html, body { height: 100%; }
+body {
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Inter", sans-serif;
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+* { scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-thumb { background: var(--line); border-radius: 8px; }
+*::-webkit-scrollbar-track { background: transparent; }
+
+::selection { background: var(--accent); color: var(--accent-ink); }
+
+kbd {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  padding: 1px 5px;
+  border: 1px solid var(--line);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--dim);
+}
+
+@keyframes locus-pop { from { opacity: 0; transform: translateY(6px) scale(0.985); } to { opacity: 1; transform: none; } }
+.pop { animation: locus-pop 0.14s cubic-bezier(0.2, 0.8, 0.3, 1); }
+
+@keyframes locus-toast { 0% { opacity: 0; transform: translateY(12px); } 10%, 88% { opacity: 1; transform: none; } 100% { opacity: 0; transform: translateY(8px); } }
+.toast { animation: locus-toast 2.6s ease forwards; }
+
+.row-hover:hover { background: color-mix(in srgb, var(--wash) 60%, transparent); }
+.focus-ring:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* cmdk minimal reset */
+[cmdk-overlay] { position: fixed; inset: 0; background: rgba(17, 45, 78, 0.38); backdrop-filter: blur(2px); }
+[cmdk-list] { max-height: 320px; overflow: auto; }
