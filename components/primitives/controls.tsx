@@ -105,9 +105,12 @@ export function Switch({ checked, onChange, label, disabled }: { checked: boolea
       aria-label={label}
       disabled={disabled}
       onClick={(e) => { e.stopPropagation(); onChange(!checked); }}
-      className={`focus-ring relative inline-flex h-[18px] w-[30px] shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ${checked ? "bg-accent" : "bg-line-strong"}`}
+      // 32px hit area on touch, visual track stays 30×18
+      className="focus-ring group relative inline-flex h-8 w-10 shrink-0 items-center justify-center rounded-full disabled:opacity-50 sm:h-[18px] sm:w-[30px]"
     >
-      <span className={`inline-block h-[14px] w-[14px] rounded-full bg-white shadow transition-transform ${checked ? "translate-x-[14px]" : "translate-x-[2px]"}`} />
+      <span className={`relative inline-flex h-[18px] w-[30px] items-center rounded-full transition-colors ${checked ? "bg-accent" : "bg-line-strong"}`}>
+        <span className={`inline-block h-[14px] w-[14px] rounded-full bg-white shadow transition-transform ${checked ? "translate-x-[14px]" : "translate-x-[2px]"}`} />
+      </span>
     </button>
   );
 }

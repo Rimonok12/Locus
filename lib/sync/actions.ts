@@ -278,6 +278,9 @@ export async function deleteTeam(id: string) {
     dropRows("issues", Object.values(s.issues).filter((i) => i.team_id === id).map((i) => i.id));
     dropRows("workflow_states", Object.values(s.workflow_states).filter((x) => x.team_id === id).map((x) => x.id));
     dropRows("cycles", Object.values(s.cycles).filter((x) => x.team_id === id).map((x) => x.id));
+    dropRows("labels", Object.values(s.labels).filter((x) => x.team_id === id).map((x) => x.id));
+    dropRows("team_members", Object.keys(s.team_members).filter((k) => k.startsWith(`${id}:`)));
+    dropRows("views", Object.values(s.views).filter((x) => x.team_id === id).map((x) => x.id));
   }
   return ok;
 }
