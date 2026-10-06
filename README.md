@@ -2,7 +2,19 @@
 
 **Issue tracking at the speed of thought.** Locus is a real-time, keyboard-first issue tracker for software teams, in the spirit of Linear. It is built with Next.js 14, TypeScript, Tailwind CSS and Supabase (Postgres, Auth, Realtime and Storage).
 
-**Live:** https://locus-navy.vercel.app
+**Live:** https://locus-navy.vercel.app · free email sign-up · [MIT licensed](LICENSE), fork away
+
+![Issues list](docs/screenshots/issues.jpg)
+
+| Kanban board | Issue detail |
+|---|---|
+| ![Board](docs/screenshots/board.jpg) | ![Issue](docs/screenshots/issue.jpg) |
+| **⌘K command menu** | **Projects** |
+| ![Command menu](docs/screenshots/command-menu.jpg) | ![Project](docs/screenshots/project.jpg) |
+| **Cycles with a burn-up chart** | **Light theme** |
+| ![Cycle](docs/screenshots/cycle.jpg) | ![Light theme](docs/screenshots/light.jpg) |
+
+<p align="center"><img src="docs/screenshots/mobile.jpg" alt="Locus on a phone" width="480"></p>
 
 ## Features
 
