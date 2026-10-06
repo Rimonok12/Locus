@@ -93,3 +93,7 @@ Turn off **Confirm email** for instant sign-up. Supabase's built-in mailer only 
 
 **Rimon Debnath**, Software Engineer (AI & Full-Stack)
 Portfolio: https://rimon-portfolio.vercel.app · GitHub: [@Rimonok12](https://github.com/Rimonok12) · LinkedIn: [rimon12](https://linkedin.com/in/rimon12)
+
+## License
+
+[MIT](LICENSE). Fork it, learn from it, run it on your own Supabase project.
